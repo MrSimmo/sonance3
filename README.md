@@ -59,6 +59,8 @@ bash build.sh
 
 This creates `Sonance3.wgt` (~200KB) which you can install via Jellyfin2Samsung.
 
+If you are using Nix, you can make use of the provided `shell.nix` with `nix-shell` to have a shell environment with the needed dependencies.
+
 ## Setup
 
 1. Launch Sonance on your TV
@@ -66,7 +68,7 @@ This creates `Sonance3.wgt` (~200KB) which you can install via Jellyfin2Samsung.
 3. Enter your username and password
 4. You're in — start browsing and playing
 
-Sonance communicates with your server via the Subsonic REST API. 
+Sonance communicates with your server via the Subsonic REST API.
 
 ## Remote Controls
 
@@ -123,7 +125,7 @@ python3 -m http.server 8080
 # Open http://localhost:8080 in your browser
 ```
 
-The app runs in any modern browser for development. AVPlay features (hardware decoding, media keys) only work on the TV — the browser uses HTML5 Audio as a fallback. 
+The app runs in any modern browser for development. AVPlay features (hardware decoding, media keys) only work on the TV — the browser uses HTML5 Audio as a fallback.
 
 
 ### Project structure
@@ -175,7 +177,7 @@ This app targets Samsung TVs from 2019, which run Chromium 63. Key limitations t
 
 ## Licence
 
-GNU GPL v3. You are free to use this however you want as long as it stays free and open-source. You cannot commercialise this or close source any version of it. 
+GNU GPL v3. You are free to use this however you want as long as it stays free and open-source. You cannot commercialise this or close source any version of it.
 You cannot use this to train AI.
 
 ## Acknowledgements

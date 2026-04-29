@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Sonance — Build Script
 # Packages the app into Sonance3.wgt for Samsung Tizen TV deployment.
 #
