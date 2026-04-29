@@ -27,6 +27,10 @@ var LibraryScreen = (function() {
     var ARTIST_ITEM_HEIGHT = 180; // px — 100 avatar + name + count + 8px×2 padding + 24px row gap
     var ARTIST_ITEM_MIN_WIDTH = 130;
 
+    // Sort state
+    var _albumSort = 'alphabeticalByName'; // 'alphabeticalByName' | 'random'
+    var _artistSort = 'name';              // 'name' | 'albums' | 'random'
+
     // V3-3 vertical sub-nav
     var LIBRARY_TABS = [
         { key: 'albums',  label: 'Albums'  },
@@ -106,6 +110,72 @@ var LibraryScreen = (function() {
             }
             return;
         }
+    }
+
+    // =========================================
+    //  Sort Bars
+    // =========================================
+
+    function _renderAlbumSortBar() {
+        var bar = el('div', { className: 'library-sort-bar', id: 'album-sort-bar' });
+        var sorts = [
+            { key: 'alphabeticalByName', label: 'A-Z' },
+            { key: 'random', label: 'Random' }
+        ];
+        sorts.forEach(function(s) {
+            var btn = el('button', {
+                className: 'library-sort-btn focusable' + (_albumSort === s.key ? ' active' : '')
+            }, s.label);
+            btn.addEventListener('click', function() {
+                if (_albumSort === s.key) return;
+                _albumSort = s.key;
+                _switchTabInstant('albums');
+            });
+            bar.appendChild(btn);
+        });
+        return bar;
+    }
+
+    function _renderArtistSortBar() {
+        var bar = el('div', { className: 'library-sort-bar', id: 'artist-sort-bar' });
+        var sorts = [
+            { key: 'name', label: 'A-Z' },
+            { key: 'albums', label: 'Albums' },
+            { key: 'random', label: 'Random' }
+        ];
+        sorts.forEach(function(s) {
+            var btn = el('button', {
+                className: 'library-sort-btn focusable' + (_artistSort === s.key ? ' active' : '')
+            }, s.label);
+            btn.addEventListener('click', function() {
+                if (_artistSort === s.key) return;
+                _artistSort = s.key;
+                _switchTabInstant('artists');
+            });
+            bar.appendChild(btn);
+        });
+        return bar;
+    }
+
+    function _sortArtists(artists, sortType) {
+        if (sortType === 'albums') {
+            return artists.slice().sort(function(a, b) {
+                var ac = (b && b.albumCount) || 0;
+                var bc = (a && a.albumCount) || 0;
+                if (ac !== bc) return ac - bc;
+                return ((a && a.name) || '').localeCompare((b && b.name) || '');
+            });
+        } else if (sortType === 'random') {
+            var shuffled = artists.slice();
+            for (var i = shuffled.length - 1; i > 0; i--) {
+                var j = Math.floor(Math.random() * (i + 1));
+                var t = shuffled[i];
+                shuffled[i] = shuffled[j];
+                shuffled[j] = t;
+            }
+            return shuffled;
+        }
+        return artists;
     }
 
     // =========================================
@@ -464,7 +534,7 @@ var LibraryScreen = (function() {
         function fetchPage(count, loaderOffset) {
             if (!multi) {
                 return api.getAlbumList2(
-                    'alphabeticalByName', count, loaderOffset, libraryIds
+                    _albumSort, count, loaderOffset, libraryIds
                 );
             }
             // Refill from upstream until `count` fresh items have been
@@ -475,7 +545,7 @@ var LibraryScreen = (function() {
                     return Promise.resolve(collected.slice(0, count));
                 }
                 return api.getAlbumList2(
-                    'alphabeticalByName', count, apiOffset, libraryIds
+                    _albumSort, count, apiOffset, libraryIds
                 ).then(function(albums) {
                     apiOffset += count;
                     if (!albums.length) {
@@ -509,6 +579,18 @@ var LibraryScreen = (function() {
             }
             if (!_contentContainer) return;
             _contentContainer.textContent = '';
+            _contentContainer.appendChild(_renderAlbumSortBar());
+
+            FocusManager.registerZone('library-sort', {
+                selector: '#album-sort-bar .focusable',
+                columns: 2,
+                onActivate: function(idx, element) { element.click(); },
+                neighbors: {
+                    left: 'library-subnav',
+                    up: 'topnav',
+                    down: 'library-grid'
+                }
+            });
 
             if (albums.length === 0) {
                 _renderEmpty('No albums found');
@@ -603,9 +685,9 @@ var LibraryScreen = (function() {
                 }
             },
             neighbors: {
-                /* V3-6-fix NAV-2: Up goes to top nav, Left enters side sub-nav. */
+                /* V3-6-fix NAV-2: Up goes to sort bar, Left enters side sub-nav. */
                 left: 'library-subnav',
-                up: 'topnav',
+                up: 'library-sort',
                 down: 'nowplaying-bar'
             }
         });
@@ -638,7 +720,8 @@ var LibraryScreen = (function() {
                 log('Library', 'Stale artists response ignored (active=' + _activeTab + ')');
                 return;
             }
-            _renderArtists(artists || [], api);
+            artists = _sortArtists(artists || [], _artistSort);
+            _renderArtists(artists, api);
         }).catch(function(err) {
             if (_activeTab !== expected) return;
             log('Library', 'Error loading artists: ' + err.message);
@@ -668,6 +751,18 @@ var LibraryScreen = (function() {
     function _renderArtists(artists, api) {
         if (!_contentContainer) return;
         _contentContainer.textContent = '';
+        _contentContainer.appendChild(_renderArtistSortBar());
+
+        FocusManager.registerZone('library-sort', {
+            selector: '#artist-sort-bar .focusable',
+            columns: 3,
+            onActivate: function(idx, element) { element.click(); },
+            neighbors: {
+                left: 'library-subnav',
+                up: 'topnav',
+                down: 'library-grid'
+            }
+        });
 
         if (artists.length === 0) {
             _renderEmpty('No artists found');
@@ -714,7 +809,7 @@ var LibraryScreen = (function() {
                 _artistsChunkRaf = requestAnimationFrame(appendChunk);
             } else if (!_artistsChunkedZoneRegistered) {
                 var artCols = _getGridColumnCount(grid) || 6;
-                _registerGridZone(artCols);
+                _registerGridZone(artCols, 'library-sort');
                 _artistsChunkedZoneRegistered = true;
             }
         }
@@ -809,7 +904,7 @@ var LibraryScreen = (function() {
             },
             neighbors: {
                 left: 'library-subnav',
-                up: 'topnav',
+                up: 'library-sort',
                 down: 'nowplaying-bar'
             }
         });
@@ -1100,7 +1195,7 @@ var LibraryScreen = (function() {
     //  Focus Zone Registration (non-albums)
     // =========================================
 
-    function _registerGridZone(cols) {
+    function _registerGridZone(cols, upNeighbor) {
         var zoneConfig = {
             selector: '#library-grid .focusable',
             columns: cols,
@@ -1116,9 +1211,9 @@ var LibraryScreen = (function() {
                 _scrollToFocused(_getScrollContainer(), element);
             },
             neighbors: {
-                /* V3-6-fix NAV-2: Up goes to top nav, Left enters side sub-nav. */
+                /* V3-6-fix NAV-2: Up goes to sort bar or top nav, Left enters side sub-nav. */
                 left: 'library-subnav',
-                up: 'topnav',
+                up: upNeighbor || 'topnav',
                 down: 'nowplaying-bar'
             }
         };

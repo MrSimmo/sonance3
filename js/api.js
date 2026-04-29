@@ -237,8 +237,14 @@ var SubsonicAPI = (function() {
         });
     };
 
-    SubsonicAPI.prototype.getStreamUrl = function(songId) {
-        return this._buildUrl('stream.view', { id: songId });
+    SubsonicAPI.prototype.getStreamUrl = function(songId, extraParams) {
+        var params = { id: songId };
+        if (extraParams) {
+            Object.keys(extraParams).forEach(function(key) {
+                params[key] = extraParams[key];
+            });
+        }
+        return this._buildUrl('stream.view', params);
     };
 
     SubsonicAPI.prototype.getCoverArtUrl = function(id, size) {
