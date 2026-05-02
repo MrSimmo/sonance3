@@ -87,6 +87,7 @@
         if (/star\.view|unstar\.view|scrobble\.view/.test(u)) return resp({});
         if (/getArtistInfo2/.test(u)) return resp({ artistInfo2: {} });
         if (/getMusicFolders/.test(u)) return resp({ musicFolders: { musicFolder: [] } });
+        if (/getTopSongs/.test(u)) return resp({ topSongs: { song: mockSongs.slice(0, 10) } });
         if (/getIndexes/.test(u)) return resp({ indexes: { index: [], lastModified: 0, ignoredArticles: 'The' } });
         return resp({});
     };

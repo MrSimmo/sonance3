@@ -672,6 +672,16 @@ var SubsonicAPI = (function() {
         });
     };
 
+    // --- Top Songs (V3.9) ---
+    SubsonicAPI.prototype.getTopSongs = function(artist, count) {
+        var params = { artist: artist };
+        if (count) params.count = count;
+        return this._cachedRequest('getTopSongs.view', params).then(function(data) {
+            var songs = data && data.topSongs;
+            return _memoSongList(_ensureArray(songs && songs.song));
+        });
+    };
+
     // --- Scrobble (not cached — write operation) ---
     SubsonicAPI.prototype.scrobble = function(id) {
         return this._request('scrobble.view', { id: id });
