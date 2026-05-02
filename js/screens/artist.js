@@ -11,6 +11,7 @@ var ArtistScreen = (function() {
     var el = SonanceUtils.el;
     var log = SonanceUtils.log;
     var createSvg = SonanceUtils.createSvg;
+    var createStarSvg = SonanceUtils.createStarSvg;
     var SVG_PATHS = SonanceUtils.SVG_PATHS;
 
     var MAX_PLAY_ALL_ALBUMS = 10;
@@ -22,6 +23,7 @@ var ArtistScreen = (function() {
     var _active = false;
     var _loadingPlayAll = false;
     var _stage3Raf = null; // V3-6-fix2 PERF-6: rAF id for deferred discography
+    var _topSongs = null;
 
     // =========================================
     //  Manual scroll-into-view (Chromium 63 safe)
@@ -118,6 +120,12 @@ var ArtistScreen = (function() {
             if (!artist) { _renderError('Artist not found.'); return; }
             _artistData = artist;
 
+            // V3.9: fetch top songs in parallel with info
+            var topSongsPromise = api.getTopSongs(artist.name, 10).catch(function(err) {
+                log('Artist', 'getTopSongs failed: ' + err.message);
+                return [];
+            });
+
             // STAGE 1 — hero + name + action buttons + stub containers.
             _renderStage1(artist, api);
             _registerLeftPanelZone(true);
@@ -135,7 +143,7 @@ var ArtistScreen = (function() {
                 // instead of the left action panel. NAV-1 snapshot restore
                 // (async poll @50ms) still overrides to the saved index when
                 // the user is backing in from album detail.
-                var firstAlbum = document.querySelector('#artist-albums-list .focusable');
+                var firstAlbum = _container && _container.querySelector('#artist-albums-list .focusable');
                 if (firstAlbum && FocusManager.getActiveZone() !== 'artist-albums') {
                     FocusManager.setActiveZone('artist-albums', 0, true);
                 }
@@ -147,6 +155,15 @@ var ArtistScreen = (function() {
                 if (!_active) return;
                 _artistInfo = info;
                 _renderStage2BioAndSimilar(artist, info, api);
+                _registerArtistContentZones(false);
+            });
+
+            // STAGE 4 — popular songs (V3.9). Renders once getTopSongs
+            // resolves; appends below discography.
+            topSongsPromise.then(function(songs) {
+                if (!_active) return;
+                _topSongs = songs;
+                _renderStage4TopSongs(artist, api);
                 _registerArtistContentZones(false);
             });
 
@@ -227,6 +244,7 @@ var ArtistScreen = (function() {
         // --- RIGHT PANEL — stubs for stages 2 & 3 ---
         var rightPanel = el('div', { className: 'artist-detail-right' });
         rightPanel.appendChild(el('div', { id: 'artist-discography-stub' }));
+        rightPanel.appendChild(el('div', { id: 'artist-top-songs-stub' }));
         rightPanel.appendChild(el('div', { id: 'artist-bio-stub' }));
         rightPanel.appendChild(el('div', { id: 'artist-similar-stub' }));
 
@@ -237,11 +255,13 @@ var ArtistScreen = (function() {
     }
 
     function _renderStage2BioAndSimilar(artist, info, api) {
+        if (!_container) return;
+
         // Re-render hero photo if Last.fm provided one (swap in place).
         if (info) {
             var imageUrl = info.largeImageUrl || info.mediumImageUrl || info.smallImageUrl || null;
             if (imageUrl) {
-                var oldWrap = document.getElementById('artist-photo-wrap');
+                var oldWrap = _container.querySelector('#artist-photo-wrap');
                 if (oldWrap && oldWrap.parentNode) {
                     var newWrap = _renderArtistPhoto(artist, info, api);
                     newWrap.id = 'artist-photo-wrap';
@@ -250,14 +270,14 @@ var ArtistScreen = (function() {
             }
         }
 
-        var bioStub = document.getElementById('artist-bio-stub');
+        var bioStub = _container.querySelector('#artist-bio-stub');
         if (bioStub) {
             bioStub.textContent = '';
             var bio = _renderBiography(info);
             if (bio) bioStub.appendChild(bio);
         }
 
-        var similarStub = document.getElementById('artist-similar-stub');
+        var similarStub = _container.querySelector('#artist-similar-stub');
         if (similarStub) {
             similarStub.textContent = '';
             var similar = _renderSimilarArtists(info, api);
@@ -266,10 +286,19 @@ var ArtistScreen = (function() {
     }
 
     function _renderStage3Discography(artist, api) {
-        var stub = document.getElementById('artist-discography-stub');
+        if (!_container) return;
+        var stub = _container.querySelector('#artist-discography-stub');
         if (!stub) return;
         stub.textContent = '';
         stub.appendChild(_renderDiscography(artist, api));
+    }
+
+    function _renderStage4TopSongs(artist, api) {
+        if (!_container || !_topSongs || !_topSongs.length) return;
+        var stub = _container.querySelector('#artist-top-songs-stub');
+        if (!stub) return;
+        stub.textContent = '';
+        stub.appendChild(_renderPopularSongs(artist, api));
     }
 
     // --- Artist photo (200px circle) ---
@@ -366,6 +395,64 @@ var ArtistScreen = (function() {
         return section;
     }
 
+    function _renderPopularSongs(artist, api) {
+        var songs = _topSongs || [];
+        if (!songs.length) return null;
+
+        var section = el('div', { className: 'artist-section' });
+        section.appendChild(el('div', { className: 'artist-section-label' }, 'POPULAR'));
+
+        var list = el('div', { className: 'artist-top-songs-list', id: 'artist-top-songs-list' });
+
+        songs.forEach(function(song, index) {
+            var row = el('div', {
+                className: 'track-row focusable',
+                'data-song-index': String(index),
+                'data-song-id': song.id
+            });
+
+            row.appendChild(el('div', { className: 'track-row-number' },
+                String(index + 1)));
+
+            row.appendChild(el('div', { className: 'track-row-title' },
+                song.title || 'Unknown'));
+
+            var trackStar = el('div', {
+                className: 'track-row-star',
+                'data-star-size': '14',
+                'data-song-id': song.id
+            });
+            var isStarred = (typeof StarredCache !== 'undefined' &&
+                StarredCache.isSongStarred && StarredCache.isSongStarred(song.id));
+            var starIcon = createStarSvg(isStarred);
+            starIcon.style.width = '14px';
+            starIcon.style.height = '14px';
+            trackStar.appendChild(starIcon);
+            if (isStarred) trackStar.classList.add('is-starred');
+            row.appendChild(trackStar);
+
+            row.appendChild(el('div', { className: 'track-row-duration' },
+                (song._formattedDuration || SonanceUtils.formatDuration(song.duration))));
+
+            list.appendChild(row);
+        });
+
+        // Delegated click handler for the whole list
+        list.addEventListener('click', function(ev) {
+            var r = ev.target.closest('.track-row');
+            if (!r) return;
+            var idxStr = r.getAttribute('data-song-index');
+            if (idxStr === null) return;
+            var idx = parseInt(idxStr, 10);
+            if (isNaN(idx) || !songs[idx]) return;
+            Player.setQueue(songs, idx);
+            log('Artist', 'Play popular track ' + (idx + 1) + ': ' + songs[idx].title);
+        });
+
+        section.appendChild(list);
+        return section;
+    }
+
     // --- Biography section ---
     function _renderBiography(info) {
         if (!info) return null;
@@ -431,8 +518,8 @@ var ArtistScreen = (function() {
     // =========================================
 
     function _setPlayAllLoading(isLoading) {
-        var playBtn = document.getElementById('artist-play-all-btn');
-        var shuffleBtn = document.getElementById('artist-shuffle-all-btn');
+        var playBtn = _container && _container.querySelector('#artist-play-all-btn');
+        var shuffleBtn = _container && _container.querySelector('#artist-shuffle-all-btn');
         if (isLoading) {
             if (playBtn) { playBtn.textContent = 'Loading...'; playBtn.disabled = true; }
             if (shuffleBtn) { shuffleBtn.textContent = 'Loading...'; shuffleBtn.disabled = true; }
@@ -563,9 +650,11 @@ var ArtistScreen = (function() {
     }
 
     function _registerArtistContentZones(setInitialFocus) {
-        var albumElements = document.querySelectorAll('#artist-albums-list .focusable');
-        var similarElements = document.querySelectorAll('#artist-similar-row .focusable');
+        var albumElements = _container ? _container.querySelectorAll('#artist-albums-list .focusable') : [];
+        var topTrackElements = _container ? _container.querySelectorAll('#artist-top-songs-list .focusable') : [];
+        var similarElements = _container ? _container.querySelectorAll('#artist-similar-row .focusable') : [];
         var hasAlbums = albumElements.length > 0;
+        var hasTopSongs = topTrackElements.length > 0;
         var hasSimilar = similarElements.length > 0;
 
         // Re-register left panel with correct neighbours now that we know
@@ -576,8 +665,8 @@ var ArtistScreen = (function() {
             onActivate: function(idx, element) { element.click(); },
             neighbors: {
                 left: 'topnav',
-                right: hasAlbums ? 'artist-albums' : (hasSimilar ? 'artist-similar' : null),
-                down: hasAlbums ? 'artist-albums' : (hasSimilar ? 'artist-similar' : 'nowplaying-bar')
+                right: hasAlbums ? 'artist-albums' : (hasTopSongs ? 'artist-top-tracks' : (hasSimilar ? 'artist-similar' : null)),
+                down: hasAlbums ? 'artist-albums' : (hasTopSongs ? 'artist-top-tracks' : (hasSimilar ? 'artist-similar' : 'nowplaying-bar'))
             }
         });
 
@@ -592,12 +681,34 @@ var ArtistScreen = (function() {
                     element.click();
                 },
                 onFocus: function(idx, element) {
-                    var container = document.querySelector('.artist-detail-right');
+                    var container = _container && _container.querySelector('.artist-detail-right');
                     _scrollToFocused(container, element);
                 },
                 neighbors: {
                     left: 'content',
                     up: 'topnav',
+                    down: hasTopSongs ? 'artist-top-tracks' : (hasSimilar ? 'artist-similar' : 'nowplaying-bar')
+                }
+            });
+        }
+
+        if (hasTopSongs) {
+            FocusManager.registerZone('artist-top-tracks', {
+                selector: '#artist-top-songs-list .focusable',
+                columns: 1,
+                onActivate: function(idx, element) {
+                    if (typeof App !== 'undefined' && App.saveCurrentFocus) {
+                        App.saveCurrentFocus();
+                    }
+                    element.click();
+                },
+                onFocus: function(idx, element) {
+                    var container = _container && _container.querySelector('.artist-detail-right');
+                    _scrollToFocused(container, element);
+                },
+                neighbors: {
+                    left: 'content',
+                    up: hasAlbums ? 'artist-albums' : 'topnav',
                     down: hasSimilar ? 'artist-similar' : 'nowplaying-bar'
                 }
             });
@@ -609,12 +720,12 @@ var ArtistScreen = (function() {
                 columns: similarElements.length,
                 onActivate: function(idx, element) { element.click(); },
                 onFocus: function(idx, element) {
-                    var container = document.querySelector('.artist-detail-right');
+                    var container = _container && _container.querySelector('.artist-detail-right');
                     _scrollToFocused(container, element);
                 },
                 neighbors: {
-                    left: hasAlbums ? null : 'content',
-                    up: hasAlbums ? 'artist-albums' : 'topnav',
+                    left: hasAlbums || hasTopSongs ? null : 'content',
+                    up: hasTopSongs ? 'artist-top-tracks' : (hasAlbums ? 'artist-albums' : 'topnav'),
                     down: 'nowplaying-bar'
                 }
             });
@@ -629,7 +740,7 @@ var ArtistScreen = (function() {
                 else if (index === 2) Player.next();
             },
             neighbors: {
-                up: hasSimilar ? 'artist-similar' : (hasAlbums ? 'artist-albums' : 'content'),
+                up: hasSimilar ? 'artist-similar' : (hasTopSongs ? 'artist-top-tracks' : (hasAlbums ? 'artist-albums' : 'content')),
                 left: 'topnav'
             }
         });
@@ -676,6 +787,7 @@ var ArtistScreen = (function() {
         _artistId = null;
         _artistData = null;
         _artistInfo = null;
+        _topSongs = null;
         _loadingPlayAll = false;
     }
 

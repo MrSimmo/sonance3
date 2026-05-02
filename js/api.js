@@ -237,8 +237,14 @@ var SubsonicAPI = (function() {
         });
     };
 
-    SubsonicAPI.prototype.getStreamUrl = function(songId) {
-        return this._buildUrl('stream.view', { id: songId });
+    SubsonicAPI.prototype.getStreamUrl = function(songId, extraParams) {
+        var params = { id: songId };
+        if (extraParams) {
+            Object.keys(extraParams).forEach(function(key) {
+                params[key] = extraParams[key];
+            });
+        }
+        return this._buildUrl('stream.view', params);
     };
 
     SubsonicAPI.prototype.getCoverArtUrl = function(id, size) {
@@ -663,6 +669,16 @@ var SubsonicAPI = (function() {
         return this._cachedRequest('getMusicFolders.view').then(function(data) {
             var folders = data && data.musicFolders;
             return _ensureArray(folders && folders.musicFolder);
+        });
+    };
+
+    // --- Top Songs (V3.9) ---
+    SubsonicAPI.prototype.getTopSongs = function(artist, count) {
+        var params = { artist: artist };
+        if (count) params.count = count;
+        return this._cachedRequest('getTopSongs.view', params).then(function(data) {
+            var songs = data && data.topSongs;
+            return _memoSongList(_ensureArray(songs && songs.song));
         });
     };
 

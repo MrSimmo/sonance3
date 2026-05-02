@@ -206,6 +206,9 @@ var Player = (function() {
         el._onError = function() {
             var msg = el.error ? el.error.message : 'Unknown audio error';
             error('Player', 'Audio error: ' + msg);
+            if (typeof App !== 'undefined' && App.showToast) {
+                App.showToast('Playback error: format not supported');
+            }
             next();
         };
 
@@ -439,6 +442,9 @@ var Player = (function() {
                 },
                 onerror: function(err) {
                     error('Player', 'AVPlay error: ' + err);
+                    if (typeof App !== 'undefined' && App.showToast) {
+                        App.showToast('Playback error: format not supported');
+                    }
                     next();
                 },
                 onevent: function(eventType, eventData) {
@@ -490,7 +496,12 @@ var Player = (function() {
                 error('Player', 'No API instance available');
                 return;
             }
-            streamUrl = api.getStreamUrl(track.id);
+            var streamParams = null;
+            if (track.suffix === 'opus' || (track.contentType && track.contentType.indexOf('opus') !== -1)) {
+                streamParams = { format: 'mp3' };
+                log('Player', 'Opus detected, requesting MP3 transcode');
+            }
+            streamUrl = api.getStreamUrl(track.id, streamParams);
         }
 
         log('Player', 'Loading: ' + (track.title || 'Unknown') + ' by ' + (track.artist || 'Unknown'));

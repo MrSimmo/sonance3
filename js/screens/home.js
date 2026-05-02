@@ -15,6 +15,7 @@ var HomeScreen = (function() {
     var _heroAlbum = null;
     var _newestAlbums = [];
     var _recentAlbums = [];
+    var _randomAlbums = [];
     var _playlists = [];
 
     // =========================================
@@ -54,7 +55,7 @@ var HomeScreen = (function() {
         var newestSection = el('div', { className: 'home-section' });
         newestSection.appendChild(el('div', { className: 'home-section-heading' }, 'Recently Added'));
         var newestRow = el('div', { className: 'home-row', id: 'home-newest-row' });
-        newestRow.appendChild(SonanceComponents.renderSkeletonCards(6, 162, 220, 'skeleton-card'));
+        newestRow.appendChild(SonanceComponents.renderSkeletonCards(9, 162, 220, 'skeleton-card'));
         newestSection.appendChild(newestRow);
         wrapper.appendChild(newestSection);
 
@@ -62,9 +63,17 @@ var HomeScreen = (function() {
         var recentSection = el('div', { className: 'home-section' });
         recentSection.appendChild(el('div', { className: 'home-section-heading', id: 'home-recent-heading' }, 'Recently Played'));
         var recentRow = el('div', { className: 'home-row', id: 'home-recent-row' });
-        recentRow.appendChild(SonanceComponents.renderSkeletonCards(6, 162, 220, 'skeleton-card'));
+        recentRow.appendChild(SonanceComponents.renderSkeletonCards(9, 162, 220, 'skeleton-card'));
         recentSection.appendChild(recentRow);
         wrapper.appendChild(recentSection);
+
+        // Random Albums section
+        var randomSection = el('div', { className: 'home-section' });
+        randomSection.appendChild(el('div', { className: 'home-section-heading' }, 'Random Albums'));
+        var randomRow = el('div', { className: 'home-row', id: 'home-random-row' });
+        randomRow.appendChild(SonanceComponents.renderSkeletonCards(9, 162, 220, 'skeleton-card'));
+        randomSection.appendChild(randomRow);
+        wrapper.appendChild(randomSection);
 
         // Your Playlists section
         var playlistSection = el('div', { className: 'home-section' });
@@ -81,6 +90,7 @@ var HomeScreen = (function() {
         // a per-card listener.
         newestRow.addEventListener('click', _onAlbumRowClick);
         recentRow.addEventListener('click', _onAlbumRowClick);
+        randomRow.addEventListener('click', _onAlbumRowClick);
         playlistRow.addEventListener('click', _onPlaylistRowClick);
 
         log('Home', 'Home screen rendered (loading state)');
@@ -118,14 +128,16 @@ var HomeScreen = (function() {
         var libraryIds = AuthManager.getSelectedLibraries();
 
         // Fetch all data in parallel
-        var newestPromise = api.getAlbumList2('newest', 6, 0, libraryIds);
-        var recentPromise = api.getAlbumList2('recent', 6, 0, libraryIds);
+        var newestPromise = api.getAlbumList2('newest', 9, 0, libraryIds);
+        var recentPromise = api.getAlbumList2('recent', 9, 0, libraryIds);
+        var randomPromise = api.getAlbumList2('random', 9, 0, libraryIds);
         var playlistPromise = api.getPlaylists();
 
-        Promise.all([newestPromise, recentPromise, playlistPromise]).then(function(results) {
+        Promise.all([newestPromise, recentPromise, randomPromise, playlistPromise]).then(function(results) {
             _newestAlbums = results[0] || [];
             _recentAlbums = results[1] || [];
-            _playlists = results[2] || [];
+            _randomAlbums = results[2] || [];
+            _playlists = results[3] || [];
 
             // Use first newest album as hero
             if (_newestAlbums.length > 0) {
@@ -137,6 +149,7 @@ var HomeScreen = (function() {
             _renderHero(api);
             _renderNewestAlbums(api);
             _renderRecentAlbums(api);
+            _renderRandomAlbums(api);
             _renderPlaylists(api);
             _registerFocusZones();
 
@@ -280,6 +293,35 @@ var HomeScreen = (function() {
     }
 
     // =========================================
+    //  Random Albums Row
+    // =========================================
+
+    function _renderRandomAlbums(api) {
+        var row = document.getElementById('home-random-row');
+        if (!row) return;
+        row.textContent = '';
+
+        if (!_randomAlbums || _randomAlbums.length === 0) {
+            row.appendChild(el('div', { className: 'home-empty' }, 'No albums available'));
+            return;
+        }
+
+        _randomAlbums.forEach(function(album) {
+            var card = el('div', {
+                className: 'album-card focusable',
+                'data-album-id': album.id,
+                'data-album-title': album.name || album.title || ''
+            });
+
+            card.appendChild(SonanceComponents.renderAlbumArt(album, 162, api));
+            card.appendChild(el('div', { className: 'album-card-title' }, album.name || album.title || 'Unknown'));
+            card.appendChild(el('div', { className: 'album-card-artist' }, album.artist || 'Unknown Artist'));
+
+            row.appendChild(card);
+        });
+    }
+
+    // =========================================
     //  Playlists Row
     // =========================================
 
@@ -317,13 +359,23 @@ var HomeScreen = (function() {
         var heroButtons = document.querySelectorAll('#home-hero .focusable');
         var newestCards = document.querySelectorAll('#home-newest-row .focusable');
         var recentCards = document.querySelectorAll('#home-recent-row .focusable');
+        var randomCards = document.querySelectorAll('#home-random-row .focusable');
         var playlistCards = document.querySelectorAll('#home-playlists-row .focusable');
 
         // Determine which zones exist for neighbor wiring
         var hasHero = heroButtons.length > 0;
         var hasNewest = newestCards.length > 0;
         var hasRecent = recentCards.length > 0;
+        var hasRandom = randomCards.length > 0;
         var hasPlaylists = playlistCards.length > 0;
+
+        // Helper: next zone down from current
+        function nextDown(fromNewest, fromRecent, fromRandom) {
+            if (fromNewest && hasRecent) return 'home-recent';
+            if ((fromNewest || fromRecent) && hasRandom) return 'home-random';
+            if ((fromNewest || fromRecent || fromRandom) && hasPlaylists) return 'home-playlists';
+            return 'nowplaying-bar';
+        }
 
         // Hero buttons zone (registered as 'content' — top nav → down lands here)
         if (hasHero) {
@@ -334,7 +386,7 @@ var HomeScreen = (function() {
                 onFocus: function(idx, element) { _scrollToFocused(element); },
                 neighbors: {
                     left: 'topnav',
-                    down: hasNewest ? 'home-newest' : (hasRecent ? 'home-recent' : (hasPlaylists ? 'home-playlists' : 'nowplaying-bar'))
+                    down: nextDown(true, false, false)
                 }
             });
         }
@@ -349,7 +401,7 @@ var HomeScreen = (function() {
                 neighbors: {
                     left: 'topnav',
                     up: hasHero ? 'content' : 'topnav',
-                    down: hasRecent ? 'home-recent' : (hasPlaylists ? 'home-playlists' : 'nowplaying-bar')
+                    down: nextDown(true, false, false)
                 }
             });
 
@@ -362,7 +414,7 @@ var HomeScreen = (function() {
                     onFocus: function(idx, element) { _scrollToFocused(element); },
                     neighbors: {
                         left: 'topnav',
-                        down: hasRecent ? 'home-recent' : (hasPlaylists ? 'home-playlists' : 'nowplaying-bar')
+                        down: nextDown(true, false, false)
                     }
                 });
             }
@@ -378,7 +430,7 @@ var HomeScreen = (function() {
                 neighbors: {
                     left: 'topnav',
                     up: hasNewest ? 'home-newest' : (hasHero ? 'content' : 'topnav'),
-                    down: hasPlaylists ? 'home-playlists' : 'nowplaying-bar'
+                    down: nextDown(false, true, false)
                 }
             });
 
@@ -387,6 +439,35 @@ var HomeScreen = (function() {
                 FocusManager.registerZone('content', {
                     selector: '#home-recent-row .focusable',
                     columns: recentCards.length,
+                    onActivate: function(idx, element) { element.click(); },
+                    onFocus: function(idx, element) { _scrollToFocused(element); },
+                    neighbors: {
+                        left: 'topnav',
+                        down: nextDown(false, true, false)
+                    }
+                });
+            }
+        }
+
+        // Random Albums zone
+        if (hasRandom) {
+            FocusManager.registerZone('home-random', {
+                selector: '#home-random-row .focusable',
+                columns: randomCards.length,
+                onActivate: function(idx, element) { element.click(); },
+                onFocus: function(idx, element) { _scrollToFocused(element); },
+                neighbors: {
+                    left: 'topnav',
+                    up: hasRecent ? 'home-recent' : (hasNewest ? 'home-newest' : (hasHero ? 'content' : 'topnav')),
+                    down: hasPlaylists ? 'home-playlists' : 'nowplaying-bar'
+                }
+            });
+
+            // If no hero, newest, or recent, register random as 'content'
+            if (!hasHero && !hasNewest && !hasRecent) {
+                FocusManager.registerZone('content', {
+                    selector: '#home-random-row .focusable',
+                    columns: randomCards.length,
                     onActivate: function(idx, element) { element.click(); },
                     onFocus: function(idx, element) { _scrollToFocused(element); },
                     neighbors: {
@@ -406,7 +487,7 @@ var HomeScreen = (function() {
                 onFocus: function(idx, element) { _scrollToFocused(element); },
                 neighbors: {
                     left: 'topnav',
-                    up: hasRecent ? 'home-recent' : (hasNewest ? 'home-newest' : (hasHero ? 'content' : 'topnav')),
+                    up: hasRandom ? 'home-random' : (hasRecent ? 'home-recent' : (hasNewest ? 'home-newest' : (hasHero ? 'content' : 'topnav'))),
                     down: 'nowplaying-bar'
                 }
             });
@@ -415,6 +496,7 @@ var HomeScreen = (function() {
         // Update NP bar to point up to last content zone
         var lastZone = 'content';
         if (hasPlaylists) lastZone = 'home-playlists';
+        else if (hasRandom) lastZone = 'home-random';
         else if (hasRecent) lastZone = 'home-recent';
         else if (hasNewest) lastZone = 'home-newest';
 
