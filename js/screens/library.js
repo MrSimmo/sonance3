@@ -120,6 +120,7 @@ var LibraryScreen = (function() {
         var bar = el('div', { className: 'library-sort-bar', id: 'album-sort-bar' });
         var sorts = [
             { key: 'alphabeticalByName', label: 'A-Z' },
+            { key: 'newest', label: 'Recent' },
             { key: 'random', label: 'Random' }
         ];
         sorts.forEach(function(s) {
@@ -583,7 +584,7 @@ var LibraryScreen = (function() {
 
             FocusManager.registerZone('library-sort', {
                 selector: '#album-sort-bar .focusable',
-                columns: 2,
+                columns: 3,
                 onActivate: function(idx, element) { element.click(); },
                 neighbors: {
                     left: 'library-subnav',
