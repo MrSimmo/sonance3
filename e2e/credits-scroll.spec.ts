@@ -96,7 +96,10 @@ test('F3 Now Playing credits: Down from ⓘ enters the scroller, no row is highl
   expect(entered.focusedRows).toBe(0);
   expect(entered.top).toBe(0);                           // entering does not scroll
   expect(entered.rowBgs).toEqual(['rgba(0, 0, 0, 0)']);
-  expect(entered.indicator).toBe(1);
+  // The indicator fades over 0.15 s; read at the very end of that fade, its
+  // opacity can be a float hair off 0 or 1 (2.1e-10 on a CI runner, run
+  // 37633446833), so shown is > 0.99 and hidden is < 0.01.
+  expect(entered.indicator).toBeGreaterThan(0.99);
   const w = await walkScroll(page, '.np-credits-scroll');
   test.info().annotations.push({ type: 'steps', description: JSON.stringify(w) });
   expectSteps(w.downs, w.step, w.first.max);
@@ -107,7 +110,7 @@ test('F3 Now Playing credits: Down from ⓘ enters the scroller, no row is highl
   await H.press(page, 'ArrowUp');
   await H.settle(page, 250);
   expect(await H.focus(page)).toMatchObject({ zone: 'np-controls', index: 7, id: 'np-credits' });
-  expect((await scrollState(page, '.np-credits-scroll')).indicator).toBe(0);
+  expect((await scrollState(page, '.np-credits-scroll')).indicator).toBeLessThan(0.01);
 });
 
 test('F3 Now Playing credits: Down at the bottom does nothing and keeps the focus in the panel', async ({ page }) => {
@@ -183,7 +186,7 @@ test('F3 options sheet credits: the body is the stop, no row is highlighted, Up/
   expect(s0.rowBgs).toEqual(['rgba(0, 0, 0, 0)']);
   expect(s0.top).toBe(0);
   expect(s0.max).toBeGreaterThan(0);                     // the full credits overflow the panel at 150 %
-  expect(s0.indicator).toBe(1);
+  expect(s0.indicator).toBeGreaterThan(0.99);
   await page.screenshot({ path: 'screenshots/v3-10/fix2-sheet-credits-top-150.png' });
   const w = await walkScroll(page, '#options-sheet .options-sheet-body');
   test.info().annotations.push({ type: 'steps', description: JSON.stringify(w) });
@@ -197,7 +200,7 @@ test('F3 options sheet credits: the body is the stop, no row is highlighted, Up/
   await H.settle(page, 250);           // past the indicator's 0.15 s fade-out
   expect(await page.evaluate(() => FocusManager.getCurrentFocused()!.getAttribute('data-action'))).toBe('credits');
   expect(await page.evaluate(() => document.querySelector('#options-sheet .scroll-indicator') ?
-    parseFloat(getComputedStyle(document.querySelector('#options-sheet .scroll-indicator')!).opacity) : 0)).toBe(0);
+    parseFloat(getComputedStyle(document.querySelector('#options-sheet .scroll-indicator')!).opacity) : 0)).toBeLessThan(0.01);
   await H.press(page, 'Escape');
   await H.settle(page, 100);
   expect(await page.evaluate(() => ({ open: OptionsSheet.isOpen(), zone: FocusManager.getActiveZone(),

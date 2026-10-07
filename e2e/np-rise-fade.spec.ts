@@ -9,33 +9,43 @@ import * as H from './helpers/sonance';
 // ghost stays still and fades 1 -> 0 over the rise; on Back the incoming
 // page fades 0 -> 1, without moving, as Now Playing sinks.
 
-type Sample = { t: number; op: number | null };
+type Sample = { t: number; op: number };
+type Curve = { found: boolean; dur: number; samples: Sample[] };
 
-// From the next keydown, sample `sel`'s computed opacity on every frame
-// until it leaves the DOM (or 600 ms). t is ms after the keydown.
-async function sampleFrom(page: Page, sel: string) {
+// Reads the opacity curve of the transition the next key press starts on
+// `sel`. The keydown listener is added after FocusManager's (same target,
+// same phase), so the navigation has already run when it fires. It pauses
+// `sel`'s CSS opacity transition, seeks it to every 25 ms of its own
+// timeline, reads the computed opacity at each, then plays it on from 0.
+// t is ms into the transition, whatever the frame rate: per-frame (rAF)
+// sampling failed on a slow CI runner, where no frame fell in the window or
+// the transition started a frame late (run 37633446833).
+async function readCurveOnKey(page: Page, sel: string) {
   await page.evaluate((s) => {
     const w = window as any;
-    w.__samples = [];
-    w.__sampling = true;
-    document.addEventListener('keydown', function start() {
-      document.removeEventListener('keydown', start, true);
-      const t0 = performance.now();
-      function tick() {
-        const n = document.querySelector(s) as HTMLElement | null;
-        const t = performance.now() - t0;
-        w.__samples.push({ t, op: n ? parseFloat(getComputedStyle(n).opacity) : null });
-        if ((n || w.__samples.length < 3) && t < 600) requestAnimationFrame(tick);
-        else w.__sampling = false;
+    w.__curve = null;
+    document.addEventListener('keydown', function read() {
+      document.removeEventListener('keydown', read);
+      const n = document.querySelector(s) as HTMLElement | null;
+      const tr = n ? n.getAnimations().filter((a: any) => a.transitionProperty === 'opacity')[0] : undefined;
+      if (!n || !tr) { w.__curve = { found: false, dur: 0, samples: [] }; return; }
+      const dur = Number(tr.effect!.getComputedTiming().duration);
+      const samples = [];
+      tr.pause();
+      for (let t = 0; t <= dur; t += 25) {
+        tr.currentTime = t;
+        samples.push({ t, op: parseFloat(getComputedStyle(n).opacity) });
       }
-      tick();
-    }, true);
+      tr.currentTime = 0;
+      tr.play();
+      w.__curve = { found: true, dur, samples };
+    });
   }, sel);
 }
 
-async function samples(page: Page): Promise<Sample[]> {
-  await page.waitForFunction(() => !(window as any).__sampling, null, { timeout: 3000 });
-  return page.evaluate(() => (window as any).__samples);
+async function curve(page: Page): Promise<Curve> {
+  await page.waitForFunction(() => !!(window as any).__curve, null, { timeout: 3000 });
+  return page.evaluate(() => (window as any).__curve);
 }
 
 async function toTheBar(page: Page) {
@@ -50,25 +60,27 @@ async function toTheBar(page: Page) {
 
 test('F1 the page under a rising Now Playing fades 1 -> 0 and is gone by the end (D152)', async ({ page }) => {
   await toTheBar(page);
-  await sampleFrom(page, '.page-ghost');
+  await readCurveOnKey(page, '.page-ghost');
   await page.keyboard.press('Enter');
-  const s = await samples(page);
-  test.info().annotations.push({ type: 'rise ghost opacity', description: JSON.stringify(s.map((x) => [Math.round(x.t), x.op])) });
+  const c = await curve(page);
+  test.info().annotations.push({ type: 'rise ghost opacity', description: JSON.stringify({ dur: c.dur, samples: c.samples.map((x) => [x.t, x.op]) }) });
   expect(await page.evaluate(() => App.getCurrentScreen())).toBe('nowplaying');
-  const live = s.filter((x) => x.op !== null);
-  expect(live.length).toBeGreaterThan(3);
-  // Mid-rise (100-150 ms after the keydown): strictly between 0 and 1.
-  const mid = live.filter((x) => x.t >= 100 && x.t <= 150);
-  expect(mid.length, 'a frame between 100 and 150 ms').toBeGreaterThan(0);
+  expect(c.found, 'the ghost and its opacity transition').toBe(true);
+  const s = c.samples;
+  expect(s.length).toBeGreaterThan(3);
+  expect(s[0].op).toBe(1);
+  // Mid-rise (100-150 ms into it): strictly between 0 and 1.
+  const mid = s.filter((x) => x.t >= 100 && x.t <= 150);
+  expect(mid.length, 'a sample between 100 and 150 ms').toBeGreaterThan(0);
   for (const m of mid) {
-    expect(m.op!).toBeGreaterThan(0);
-    expect(m.op!).toBeLessThan(1);
+    expect(m.op).toBeGreaterThan(0);
+    expect(m.op).toBeLessThan(1);
   }
-  // A later sample is lower; the last one before removal is at most 0.1.
-  const later = live.filter((x) => x.t > mid[mid.length - 1].t);
+  // A later sample is lower; the last, at the end, is at most 0.1.
+  const later = s.filter((x) => x.t > mid[mid.length - 1].t);
   expect(later.length).toBeGreaterThan(0);
-  expect(later[later.length - 1].op!).toBeLessThan(mid[0].op!);
-  expect(live[live.length - 1].op!).toBeLessThanOrEqual(0.1);
+  expect(later[later.length - 1].op).toBeLessThan(mid[0].op);
+  expect(s[s.length - 1].op).toBeLessThanOrEqual(0.1);
   // The ghost stays still under Now Playing (it never moves).
   await page.waitForTimeout(400);
   expect(await page.evaluate(() => document.querySelectorAll('.page-ghost').length)).toBe(0);
@@ -79,19 +91,22 @@ test('F1 the page Now Playing sinks back to fades 0 -> 1 without moving (D152)',
   await page.keyboard.press('Enter');
   await H.waitForScreen(page, 'nowplaying');
   await page.waitForTimeout(400);
-  await sampleFrom(page, '#page-current');
+  await readCurveOnKey(page, '#page-current');
   await page.keyboard.press('Escape');
+  const c = await curve(page);
   await page.waitForTimeout(450);
-  await page.evaluate(() => { (window as any).__sampling = false; });
-  const s: Sample[] = await page.evaluate(() => (window as any).__samples);
-  test.info().annotations.push({ type: 'sink incoming opacity', description: JSON.stringify(s.map((x) => [Math.round(x.t), x.op])) });
+  test.info().annotations.push({ type: 'sink incoming opacity', description: JSON.stringify({ dur: c.dur, samples: c.samples.map((x) => [x.t, x.op]) }) });
   expect(await page.evaluate(() => App.getCurrentScreen())).toBe('library');
-  const mid = s.filter((x) => x.t >= 60 && x.t <= 180 && x.op !== null);
+  expect(c.found, 'the incoming page and its opacity transition').toBe(true);
+  const s = c.samples;
+  expect(s[0].op).toBe(0);
+  const mid = s.filter((x) => x.t >= 60 && x.t <= 180);
   expect(mid.length).toBeGreaterThan(0);
   for (const m of mid) {
-    expect(m.op!).toBeGreaterThan(0);
-    expect(m.op!).toBeLessThan(1);
+    expect(m.op).toBeGreaterThan(0);
+    expect(m.op).toBeLessThan(1);
   }
+  expect(s[s.length - 1].op).toBeGreaterThanOrEqual(0.9);
   // No movement: the incoming page never carries a transform.
   expect(await page.evaluate(() => (document.getElementById('page-current') as HTMLElement).style.transform)).toBe('');
   expect(await page.evaluate(() => getComputedStyle(document.getElementById('page-current')!).opacity)).toBe('1');

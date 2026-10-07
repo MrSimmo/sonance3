@@ -180,8 +180,10 @@ test('R7 Back closes the panel first and returns focus to ⓘ; the next Back lea
   expect(await page.evaluate(() => document.querySelectorAll('.page-ghost').length)).toBe(0);
   expect((await H.focus(page)).id).toBe('np-credits');
   // The second Back is the sink: the ghost (Now Playing) drops under nothing.
+  // Read straight after the key press, as transitions.spec.ts R2 does: the
+  // sink runs inside the keydown handler and its ghost is removed 280 ms
+  // later, which two frames on a slow CI runner outlasted (run 37633446833).
   await H.press(page, 'Escape');
-  await H.settle(page, 30);
   const sink = await page.evaluate(() => {
     const g = document.querySelector('.page-ghost') as HTMLElement | null;
     return { screen: App.getCurrentScreen(), ghostTransform: g ? g.style.transform : null };

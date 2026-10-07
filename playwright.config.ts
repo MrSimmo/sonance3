@@ -14,8 +14,11 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
-  retries: 0,
-  reporter: 'list',
+  // On CI (GitHub Actions, a slower shared runner): a retry reports a
+  // timing-dependent test as "flaky" instead of failing the run, and the
+  // html report is what the workflow uploads as `playwright-report/`.
+  retries: process.env.CI ? 2 : 0,
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://localhost:8091',
     viewport: { width: 1920, height: 1080 },

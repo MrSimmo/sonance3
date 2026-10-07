@@ -103,6 +103,35 @@ test('R10 at rest the gradient adds no composited layer (CDP LayerTree, within 1
   expect(gradient.anims).toBe(solid.anims);
 });
 
+// Resolves once every <img> is loaded and no animation or transition has run
+// for three frames in a row, then decodes the images and Now Playing's
+// backdrop (a CSS background, not in document.images). Now Playing arrives
+// with five transitions (the nav pill, .np-left, Up Next's fade and slide,
+// the bar's fade); on a slow CI runner one shot caught them after the fixed
+// settle and differed from the other by 119/255 (run 37633446833).
+async function quiet(page: Page) {
+  await page.evaluate(() => new Promise<void>((resolve, reject) => {
+    const t0 = performance.now();
+    let calm = 0;
+    (function tick() {
+      const busy = Array.from(document.images).some((i) => !i.complete) ||
+        document.getAnimations().some((a) => a.playState === 'running');
+      calm = busy ? 0 : calm + 1;
+      if (calm >= 3) return resolve();
+      if (performance.now() - t0 > 10000) return reject(new Error('still loading or animating after 10 s'));
+      requestAnimationFrame(tick);
+    })();
+  }));
+  await page.evaluate(() => {
+    const urls = Array.from(document.images).filter((i) => i.src).map((i) => i.src);
+    const bg = document.querySelector('.np-bg-image');
+    const m = bg ? /url\("?([^")]*)"?\)/.exec(getComputedStyle(bg).backgroundImage) : null;
+    if (m) urls.push(m[1]);
+    return Promise.all(urls.map((u) => { const i = new Image(); i.src = u; return i.decode().catch(() => {}); }));
+  });
+  await H.settle(page, 50);
+}
+
 test('R10 not visible on Now Playing (within 2/255 of Solid everywhere) or on Login (no layer)', async ({ page }) => {
   async function npShot(storage: any) {
     await H.bootMock(page, { storage });
@@ -110,6 +139,7 @@ test('R10 not visible on Now Playing (within 2/255 of Solid everywhere) or on Lo
     await page.evaluate(() => App.navigateTo('nowplaying'));
     await H.waitForScreen(page, 'nowplaying');
     await H.settle(page, 900);
+    await quiet(page);
     return page.screenshot();
   }
   const solid = await npShot({ 'sonance-backdrop': 'solid' });
