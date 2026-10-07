@@ -14,10 +14,13 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
-  // On CI (GitHub Actions, a slower shared runner): a retry reports a
-  // timing-dependent test as "flaky" instead of failing the run, and the
-  // html report is what the workflow uploads as `playwright-report/`.
+  // On CI (GitHub Actions, a slower shared runner): a test that fails and
+  // then passes on a retry is labelled "flaky" and still fails the run
+  // (failOnFlakyTests), so a retry tells an intermittent failure from a
+  // consistent one without letting either through. The html report is what
+  // the workflow uploads as `playwright-report/`.
   retries: process.env.CI ? 2 : 0,
+  failOnFlakyTests: !!process.env.CI,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://localhost:8091',
