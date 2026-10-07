@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0, user-scalable=no">
+    <title>Sonance - Mocked</title>
+    <link rel="stylesheet" href="/css/styles.css?v=v3-11">
+    <!-- Same pre-paint Interface size script as index.html (v3.10 R4, D49). -->
+    <script>
+        (function() {
+            var scale = 1.5;
+            try {
+                var v = parseFloat(localStorage.getItem('sonance-ui-scale'));
+                if (v === 1 || v === 1.25 || v === 1.5 || v === 1.75 || v === 2) scale = v;
+            } catch (e) { /* storage blocked: keep the default */ }
+            document.documentElement.style.fontSize = (10 * scale) + 'px';
+        })();
+    </script>
+    <!-- The launch splash, the same as index.html (v3.10 R11). -->
+    <style>
+        /* v3.10 R11 (ticket §6.7): the launch splash. Here, not in
+           css/styles.css, so it is self-contained static markup; after the
+           Interface size script above, so its rem lengths are drawn at the
+           stored size. Transform and opacity only. The hold is the second
+           half of splash-in: its animationend is "the hold has elapsed". */
+        #splash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse at 50% 45%, var(--bg-main), var(--bg-primary) 75%);
+        }
+        .splash-logo {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            animation: splash-in 900ms both;
+        }
+        .splash-tile {
+            width: 26.4rem;
+            height: 26.4rem;
+            border-radius: 6.6rem;
+            background: linear-gradient(135deg, var(--accent), #8a4dff);
+            box-shadow: 0 2rem 8rem rgba(var(--accent-rgb), 0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .splash-tile svg {
+            width: 16rem;
+            height: 16rem;
+        }
+        .splash-title {
+            margin-top: 3.6rem;
+            font-size: 10rem;
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: 0.2rem;
+            color: var(--text-primary);
+        }
+        .splash-sub {
+            margin-top: 1.2rem;
+            font-size: 2.6rem;
+            font-weight: 600;
+            letter-spacing: 1rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        #splash.splash-exit {
+            animation: splash-fade 500ms cubic-bezier(.2, .8, .2, 1) both;
+        }
+        #splash.splash-exit .splash-logo {
+            animation: splash-out 500ms cubic-bezier(.2, .8, .2, 1) both;
+        }
+        @keyframes splash-in {
+            0% { transform: scale(0); opacity: 0; animation-timing-function: cubic-bezier(.2, .9, .25, 1.15); }
+            50% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        /* v3.10-fix2 F6 (D160): the exit grows to 1.4, not 2.2 (ticket
+           §6.7): at 2.2 the logo and its glow re-rastered at 2.2x as the exit
+           began (~72 ms of raster at CPU 6x in the browser, more on the TV);
+           at 1.4 it keeps the grow's raster. */
+        @keyframes splash-out {
+            from { transform: scale(1); opacity: 1; }
+            to { transform: scale(1.4); opacity: 0; }
+        }
+        @keyframes splash-fade {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="splash" aria-hidden="true">
+        <div class="splash-logo">
+            <div class="splash-tile">
+                <!-- The S-wave mark: js/app.js _createLogoSvg's paths. -->
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-linecap="round">
+                    <path d="M15.5,4 A7,7 0 0,0 8.5,9" stroke-width="2.4" opacity="0.95"/>
+                    <path d="M8.5,9 A7,7 0 0,1 15.5,14" stroke-width="2.4" opacity="0.95"/>
+                    <path d="M15.5,14 A7,7 0 0,0 8.5,19" stroke-width="2.4" opacity="0.2"/>
+                    <path d="M18,5 Q20.5,7.5 18,10" stroke-width="1.6" opacity="0.5"/>
+                    <path d="M20,3.5 Q23.5,7.5 20,11.5" stroke-width="1.3" opacity="0.3"/>
+                    <path d="M6,10 Q3.5,12 6,14" stroke-width="1.6" opacity="0.5"/>
+                    <path d="M4,8.5 Q0.5,12 4,15.5" stroke-width="1.3" opacity="0.3"/>
+                </svg>
+            </div>
+            <div class="splash-title">Sonance</div>
+            <div class="splash-sub">BY SIMMO</div>
+        </div>
+    </div>
+    <div id="app"></div>
+    <script>
+        // v3.10 R11: the splash's controller. Inline and before the bundles,
+        // so it runs before the first paint and before FocusManager listens.
+        // The exit starts when the hold has elapsed (splash-in's animationend,
+        // or a 2 s stand-in if that event never comes) AND the first
+        // screen is in the DOM (Login, or Home after a valid session), or at
+        // 6 s whatever happens. Watching the DOM rather than being told by
+        // App keeps the splash independent of the bundles: if they fail to
+        // load, the cap still clears it. Keys are swallowed until removal.
+        (function() {
+            var splash = document.getElementById('splash');
+            var app = document.getElementById('app');
+            if (!splash || !app) return;
+            var root = document.documentElement;
+            // The stored accent before the first paint, so the tile does not
+            // change colour when App.applyAccentColor runs (it sets the rest).
+            try {
+                var hex = localStorage.getItem('sonance-accent-color');
+                var rgb = localStorage.getItem('sonance-accent-rgb');
+                if (hex && rgb) {
+                    root.style.setProperty('--accent', hex);
+                    root.style.setProperty('--accent-rgb', rgb);
+                }
+            } catch (e) { /* storage blocked: the default accent */ }
+
+            var held = false, ready = false, exiting = false, removed = false;
+            var observer = null, holdTimer = null, capTimer = null, safeTimer = null;
+
+            function swallow(e) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            }
+            window.addEventListener('keydown', swallow, true);
+            window.addEventListener('keyup', swallow, true);
+
+            function remove() {
+                if (removed) return;
+                removed = true;
+                clearTimeout(holdTimer);
+                clearTimeout(capTimer);
+                clearTimeout(safeTimer);
+                if (observer) observer.disconnect();
+                window.removeEventListener('keydown', swallow, true);
+                window.removeEventListener('keyup', swallow, true);
+                if (splash.parentNode) splash.parentNode.removeChild(splash);
+            }
+            function exit() {
+                if (exiting) return;
+                exiting = true;
+                clearTimeout(holdTimer);
+                clearTimeout(capTimer);
+                if (observer) observer.disconnect();
+                splash.className = 'splash-exit';
+                // splash-fade is 500 ms; removed by then unless its event is lost.
+                safeTimer = setTimeout(remove, 800);
+            }
+            function check() {
+                if (held && ready) exit();
+            }
+            function screenUp() {
+                return !!app.querySelector('.login-screen, #page-current > *');
+            }
+            splash.addEventListener('animationend', function(e) {
+                if (e.animationName === 'splash-in') {
+                    held = true;
+                    check();
+                } else if (e.animationName === 'splash-fade') {
+                    remove();
+                }
+            });
+            holdTimer = setTimeout(function() { held = true; check(); }, 2000);
+            capTimer = setTimeout(exit, 6000);
+            observer = new MutationObserver(function() {
+                if (!screenUp()) return;
+                ready = true;
+                observer.disconnect();
+                check();
+            });
+            observer.observe(app, { childList: true, subtree: true });
+        })();
+    </script>
+    <audio id="sonance-audio" preload="auto" style="display:none;"></audio>
+    <audio id="sonance-audio-preload" preload="auto" style="display:none;"></audio>
+    <object id="av-player" type="application/avplayer" style="position:absolute;left:0;top:0;width:1px;height:1px;pointer-events:none;"></object>
+
+    <script src="/tests/mock-boot.js"></script>
+    <!-- Script order mirrors build.sh CORE_FILES + SCREEN_FILES exactly. -->
+    <script src="/js/utils.js?v=v3-11"></script>
+    <script src="/js/api.js?v=v3-11"></script>
+    <script src="/js/auth.js?v=v3-11"></script>
+    <script src="/js/focus.js?v=v3-11"></script>
+    <script src="/js/player.js?v=v3-11"></script>
+    <script src="/js/starred.js?v=v3-11"></script>
+    <script src="/js/image-cache.js?v=v3-11"></script>
+    <script src="/js/components.js?v=v3-11"></script>
+    <script src="/js/options-sheet.js?v=v3-11"></script>
+    <script src="/js/perf-hud.js?v=v3-11"></script>
+    <script src="/js/screens/login.js?v=v3-11"></script>
+    <script src="/js/screens/home.js?v=v3-11"></script>
+    <script src="/js/screens/library.js?v=v3-11"></script>
+    <script src="/js/screens/album.js?v=v3-11"></script>
+    <script src="/js/screens/artist.js?v=v3-11"></script>
+    <script src="/js/screens/search.js?v=v3-11"></script>
+    <script src="/js/screens/nowplaying.js?v=v3-11"></script>
+    <script src="/js/screens/queue.js?v=v3-11"></script>
+    <script src="/js/screens/playlists.js?v=v3-11"></script>
+    <script src="/js/screens/settings.js?v=v3-11"></script>
+    <script src="/js/app.js?v=v3-11"></script>
+</body>
+</html>

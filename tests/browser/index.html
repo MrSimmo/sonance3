@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sonance — Browser Test Harness</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, 'Helvetica Neue', sans-serif;
+            background: #0a0a0c;
+            color: #f0f0f5;
+            padding: 32px;
+        }
+        h1 { font-size: 24px; margin-bottom: 8px; }
+        .subtitle { color: #8e8ea0; font-size: 14px; margin-bottom: 24px; }
+        .config { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 32px; flex-wrap: wrap; }
+        .field { display: flex; flex-direction: column; gap: 4px; }
+        .field label { font-size: 12px; color: #8e8ea0; text-transform: uppercase; letter-spacing: 1px; }
+        .field input { padding: 10px 14px; background: #1a1a22; border: 1px solid #2a2a38; border-radius: 8px; color: #f0f0f5; font-size: 14px; font-family: inherit; width: 220px; }
+        .field input:focus { outline: 2px solid #e44d8a; outline-offset: 2px; }
+        button.run-btn { padding: 10px 24px; background: #e44d8a; border: none; border-radius: 8px; color: white; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; }
+        button.run-btn:hover { opacity: 0.9; }
+        button.run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .summary { display: flex; gap: 24px; margin-bottom: 24px; padding: 16px; background: #121217; border-radius: 10px; border: 1px solid #2a2a38; }
+        .summary-item { font-size: 14px; }
+        .summary-label { color: #8e8ea0; margin-right: 6px; }
+        .summary-pass { color: #34d399; font-weight: 700; }
+        .summary-fail { color: #ef4444; font-weight: 700; }
+        .summary-total { color: #f0f0f5; font-weight: 700; }
+        .summary-running { color: #e44d8a; }
+
+        .group { margin-bottom: 28px; }
+        .group-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #f0f0f5; border-bottom: 1px solid #2a2a38; padding-bottom: 8px; }
+        .test-row { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; font-size: 14px; }
+        .test-row:nth-child(even) { background: rgba(255,255,255,0.02); }
+        .test-icon { width: 20px; text-align: center; font-size: 16px; }
+        .test-name { flex: 1; color: #f0f0f5; }
+        .test-status { font-size: 13px; font-weight: 600; }
+        .test-pass .test-icon::after { content: "\2713"; color: #34d399; }
+        .test-pass .test-status { color: #34d399; }
+        .test-fail .test-icon::after { content: "\2717"; color: #ef4444; }
+        .test-fail .test-status { color: #ef4444; }
+        .test-pending .test-icon::after { content: "\25CB"; color: #55556a; }
+        .test-pending .test-status { color: #55556a; }
+        .test-running .test-icon::after { content: "\25CF"; color: #e44d8a; }
+        .test-running .test-status { color: #e44d8a; }
+        .test-detail { font-size: 12px; color: #55556a; margin-left: 32px; margin-top: 2px; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <h1>Sonance Test Harness</h1>
+    <div class="subtitle">Browser-based validation tests for the Sonance music player</div>
+
+    <div class="config">
+        <div class="field">
+            <label>Server URL</label>
+            <input type="text" id="cfg-server" value="http://192.168.0.2:4534" placeholder="http://192.168.0.2:4534">
+        </div>
+        <div class="field">
+            <label>Username</label>
+            <input type="text" id="cfg-user" value="" placeholder="username">
+        </div>
+        <div class="field">
+            <label>Password</label>
+            <input type="password" id="cfg-pass" value="" placeholder="password">
+        </div>
+        <button class="run-btn" id="run-btn" onclick="runTests()">Run All Tests</button>
+    </div>
+
+    <div class="summary" id="summary" style="display:none;">
+        <div class="summary-item"><span class="summary-label">Total:</span><span class="summary-total" id="sum-total">0</span></div>
+        <div class="summary-item"><span class="summary-label">Passed:</span><span class="summary-pass" id="sum-pass">0</span></div>
+        <div class="summary-item"><span class="summary-label">Failed:</span><span class="summary-fail" id="sum-fail">0</span></div>
+        <div class="summary-item"><span id="sum-status" class="summary-running">Running...</span></div>
+    </div>
+
+    <div id="results"></div>
+
+    <!-- Load Sonance core modules (needed for tests) -->
+    <script src="../../js/utils.js"></script>
+    <script src="../../js/api.js"></script>
+
+    <script>
+    /* ============================================
+       Sonance Test Harness — Test Runner
+       ============================================ */
+    (function() {
+        'use strict';
+
+        var api = null;
+
+        // --- Test Registry ---
+        var testGroups = [
+            {
+                name: 'API — Connection',
+                tests: [
+                    { name: 'Ping server', fn: testPing },
+                    { name: 'Auth token generation', fn: testAuthToken }
+                ]
+            },
+            {
+                name: 'API — Data Fetching',
+                tests: [
+                    { name: 'Fetch artists', fn: testFetchArtists },
+                    { name: 'Fetch albums (newest)', fn: testFetchAlbums },
+                    { name: 'Fetch album detail with tracks', fn: testFetchAlbumDetail },
+                    { name: 'Fetch genres', fn: testFetchGenres },
+                    { name: 'Fetch playlists', fn: testFetchPlaylists },
+                    { name: 'Fetch random songs', fn: testFetchRandomSongs },
+                    { name: 'Search query', fn: testSearch }
+                ]
+            },
+            {
+                name: 'API — URL Generation',
+                tests: [
+                    { name: 'Cover art URL structure', fn: testCoverArtUrl },
+                    { name: 'Stream URL structure', fn: testStreamUrl }
+                ]
+            },
+            {
+                name: 'Utilities',
+                tests: [
+                    { name: 'MD5 hash', fn: testMd5 },
+                    { name: 'Salt generation', fn: testSaltGeneration },
+                    { name: 'Duration formatting', fn: testFormatDuration },
+                    { name: 'DOM element helper', fn: testElHelper },
+                    { name: 'SVG creation', fn: testSvgCreation }
+                ]
+            }
+        ];
+
+        // --- Make runTests global ---
+        window.runTests = function() {
+            var serverUrl = document.getElementById('cfg-server').value.trim();
+            var username = document.getElementById('cfg-user').value.trim();
+            var password = document.getElementById('cfg-pass').value.trim();
+
+            if (!serverUrl || !username || !password) {
+                alert('Please fill in all connection fields.');
+                return;
+            }
+
+            api = new SubsonicAPI({ serverUrl: serverUrl, username: username, password: password });
+
+            document.getElementById('run-btn').disabled = true;
+            document.getElementById('summary').style.display = 'flex';
+            document.getElementById('sum-status').textContent = 'Running...';
+            document.getElementById('sum-status').className = 'summary-running';
+
+            renderTestList();
+            runAllTests();
+        };
+
+        // --- Render test list (pending state) ---
+        function renderTestList() {
+            var container = document.getElementById('results');
+            container.textContent = '';
+
+            testGroups.forEach(function(group) {
+                var groupEl = document.createElement('div');
+                groupEl.className = 'group';
+
+                var titleEl = document.createElement('div');
+                titleEl.className = 'group-title';
+                titleEl.textContent = group.name;
+                groupEl.appendChild(titleEl);
+
+                group.tests.forEach(function(test) {
+                    var row = document.createElement('div');
+                    row.className = 'test-row test-pending';
+                    row.id = 'test-' + slugify(test.name);
+
+                    var icon = document.createElement('div');
+                    icon.className = 'test-icon';
+                    row.appendChild(icon);
+
+                    var name = document.createElement('div');
+                    name.className = 'test-name';
+                    name.textContent = test.name;
+                    row.appendChild(name);
+
+                    var status = document.createElement('div');
+                    status.className = 'test-status';
+                    status.textContent = 'pending';
+                    row.appendChild(status);
+
+                    groupEl.appendChild(row);
+                });
+
+                container.appendChild(groupEl);
+            });
+        }
+
+        // --- Run all tests sequentially ---
+        function runAllTests() {
+            var allTests = [];
+            testGroups.forEach(function(group) {
+                group.tests.forEach(function(test) {
+                    allTests.push(test);
+                });
+            });
+
+            var passed = 0;
+            var failed = 0;
+            var index = 0;
+
+            function runNext() {
+                if (index >= allTests.length) {
+                    updateSummary(allTests.length, passed, failed, true);
+                    document.getElementById('run-btn').disabled = false;
+                    return;
+                }
+
+                var test = allTests[index];
+                var testId = 'test-' + slugify(test.name);
+                setTestState(testId, 'running', 'running...');
+
+                var result;
+                try {
+                    result = test.fn(api);
+                } catch (e) {
+                    result = Promise.reject(e);
+                }
+
+                if (!result || typeof result.then !== 'function') {
+                    result = Promise.resolve(result);
+                }
+
+                result.then(function(detail) {
+                    passed++;
+                    setTestState(testId, 'pass', 'PASS', detail);
+                }).catch(function(err) {
+                    failed++;
+                    var msg = err && err.message ? err.message : String(err);
+                    setTestState(testId, 'fail', 'FAIL', msg);
+                }).then(function() {
+                    updateSummary(allTests.length, passed, failed, false);
+                    index++;
+                    runNext();
+                });
+            }
+
+            runNext();
+        }
+
+        // --- UI Helpers ---
+        function setTestState(id, state, statusText, detail) {
+            var row = document.getElementById(id);
+            if (!row) return;
+            row.className = 'test-row test-' + state;
+            var statusEl = row.querySelector('.test-status');
+            if (statusEl) statusEl.textContent = statusText;
+
+            // Remove existing detail
+            var existing = row.nextElementSibling;
+            if (existing && existing.classList.contains('test-detail')) {
+                existing.parentNode.removeChild(existing);
+            }
+
+            if (detail) {
+                var detailEl = document.createElement('div');
+                detailEl.className = 'test-detail';
+                detailEl.textContent = String(detail);
+                row.parentNode.insertBefore(detailEl, row.nextSibling);
+            }
+        }
+
+        function updateSummary(total, passed, failed, done) {
+            document.getElementById('sum-total').textContent = String(total);
+            document.getElementById('sum-pass').textContent = String(passed);
+            document.getElementById('sum-fail').textContent = String(failed);
+            if (done) {
+                var statusEl = document.getElementById('sum-status');
+                if (failed === 0) {
+                    statusEl.textContent = 'All tests passed!';
+                    statusEl.className = 'summary-pass';
+                } else {
+                    statusEl.textContent = failed + ' test' + (failed > 1 ? 's' : '') + ' failed';
+                    statusEl.className = 'summary-fail';
+                }
+            }
+        }
+
+        function slugify(str) {
+            return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        }
+
+        // =========================================
+        //  Test Implementations
+        // =========================================
+
+        function testPing(api) {
+            return api.ping().then(function(result) {
+                if (!result || !result.ok) throw new Error('Ping did not return ok');
+                return 'Server responded OK';
+            });
+        }
+
+        function testAuthToken() {
+            var salt = 'testsalt123';
+            var password = 'testpass';
+            var token = SonanceUtils.md5(password + salt);
+            if (typeof token !== 'string' || token.length !== 32) {
+                throw new Error('Token is not a 32-char hex string: ' + token);
+            }
+            return 'Token: ' + token + ' (32-char hex)';
+        }
+
+        function testFetchArtists(api) {
+            return api.getArtists().then(function(artists) {
+                if (!Array.isArray(artists)) throw new Error('Expected array, got ' + typeof artists);
+                if (artists.length === 0) throw new Error('No artists returned');
+                var first = artists[0];
+                if (!first.name) throw new Error('Artist missing name field');
+                return artists.length + ' artists (first: ' + first.name + ')';
+            });
+        }
+
+        function testFetchAlbums(api) {
+            return api.getAlbumList2('newest', 5).then(function(albums) {
+                if (!Array.isArray(albums)) throw new Error('Expected array');
+                if (albums.length === 0) throw new Error('No albums returned');
+                var first = albums[0];
+                if (!first.id) throw new Error('Album missing id field');
+                if (!first.name && !first.title) throw new Error('Album missing name/title');
+                return albums.length + ' albums (first: ' + (first.name || first.title) + ')';
+            });
+        }
+
+        function testFetchAlbumDetail(api) {
+            return api.getAlbumList2('newest', 1).then(function(albums) {
+                if (albums.length === 0) throw new Error('No albums to test');
+                return api.getAlbum(albums[0].id);
+            }).then(function(album) {
+                if (!album) throw new Error('Album is null');
+                if (!album.song) throw new Error('Album missing song array');
+                if (!Array.isArray(album.song)) throw new Error('song is not an array');
+                if (album.song.length === 0) throw new Error('Album has no tracks');
+                var firstSong = album.song[0];
+                if (!firstSong.id) throw new Error('Song missing id');
+                if (!firstSong.title) throw new Error('Song missing title');
+                return (album.name || album.title) + ': ' + album.song.length + ' tracks (first: ' + firstSong.title + ')';
+            });
+        }
+
+        function testFetchGenres(api) {
+            return api.getGenres().then(function(genres) {
+                if (!Array.isArray(genres)) throw new Error('Expected array');
+                return genres.length + ' genres' + (genres.length > 0 ? ' (first: ' + (genres[0].value || genres[0].name || JSON.stringify(genres[0])) + ')' : '');
+            });
+        }
+
+        function testFetchPlaylists(api) {
+            return api.getPlaylists().then(function(playlists) {
+                if (!Array.isArray(playlists)) throw new Error('Expected array');
+                return playlists.length + ' playlists';
+            });
+        }
+
+        function testFetchRandomSongs(api) {
+            return api.getRandomSongs(5).then(function(songs) {
+                if (!Array.isArray(songs)) throw new Error('Expected array');
+                if (songs.length === 0) throw new Error('No songs returned');
+                var first = songs[0];
+                if (!first.id || !first.title) throw new Error('Song missing id/title');
+                return songs.length + ' songs (first: ' + first.title + ')';
+            });
+        }
+
+        function testSearch(api) {
+            return api.search3('rock', { artistCount: 3, albumCount: 3, songCount: 3 }).then(function(results) {
+                if (!results) throw new Error('Null results');
+                if (!Array.isArray(results.artist)) throw new Error('Missing artist array');
+                if (!Array.isArray(results.album)) throw new Error('Missing album array');
+                if (!Array.isArray(results.song)) throw new Error('Missing song array');
+                var total = results.artist.length + results.album.length + results.song.length;
+                return total + ' results (artists: ' + results.artist.length + ', albums: ' + results.album.length + ', songs: ' + results.song.length + ')';
+            });
+        }
+
+        function testCoverArtUrl(api) {
+            var url = api.getCoverArtUrl('al-123', 300);
+            if (typeof url !== 'string') throw new Error('URL is not a string');
+            if (url.indexOf('getCoverArt.view') === -1) throw new Error('Missing getCoverArt.view in URL');
+            if (url.indexOf('id=al-123') === -1) throw new Error('Missing id param');
+            if (url.indexOf('size=300') === -1) throw new Error('Missing size param');
+            if (url.indexOf('c=Sonance') === -1) throw new Error('Missing client param');
+            if (url.indexOf('v=1.16.1') === -1) throw new Error('Missing version param');
+            return url.substring(0, 80) + '...';
+        }
+
+        function testStreamUrl(api) {
+            var url = api.getStreamUrl('song-456');
+            if (typeof url !== 'string') throw new Error('URL is not a string');
+            if (url.indexOf('stream.view') === -1) throw new Error('Missing stream.view in URL');
+            if (url.indexOf('id=song-456') === -1) throw new Error('Missing id param');
+            if (url.indexOf('c=Sonance') === -1) throw new Error('Missing client param');
+            return url.substring(0, 80) + '...';
+        }
+
+        function testMd5() {
+            var hash = SonanceUtils.md5('hello');
+            var expected = '5d41402abc4b2a76b9719d911017c592';
+            if (hash !== expected) throw new Error('Expected ' + expected + ', got ' + hash);
+            return 'md5("hello") = ' + hash;
+        }
+
+        function testSaltGeneration() {
+            var salt1 = SonanceUtils.generateSalt(12);
+            var salt2 = SonanceUtils.generateSalt(12);
+            if (typeof salt1 !== 'string') throw new Error('Salt is not a string');
+            if (salt1.length !== 12) throw new Error('Salt length is ' + salt1.length + ', expected 12');
+            if (!/^[0-9a-f]+$/.test(salt1)) throw new Error('Salt contains non-hex chars: ' + salt1);
+            if (salt1 === salt2) throw new Error('Two salts are identical (not random)');
+            return 'Salt1: ' + salt1 + ', Salt2: ' + salt2;
+        }
+
+        function testFormatDuration() {
+            var tests = [
+                [0, '0:00'], [59, '0:59'], [60, '1:00'], [125, '2:05'], [3661, '61:01']
+            ];
+            for (var i = 0; i < tests.length; i++) {
+                var input = tests[i][0];
+                var expected = tests[i][1];
+                var result = SonanceUtils.formatDuration(input);
+                if (result !== expected) throw new Error('formatDuration(' + input + ') = "' + result + '", expected "' + expected + '"');
+            }
+            return 'All duration format cases passed';
+        }
+
+        function testElHelper() {
+            var div = SonanceUtils.el('div', { className: 'test-class' }, 'Hello');
+            if (div.tagName !== 'DIV') throw new Error('Wrong tag: ' + div.tagName);
+            if (div.className !== 'test-class') throw new Error('Wrong class: ' + div.className);
+            if (div.textContent !== 'Hello') throw new Error('Wrong text: ' + div.textContent);
+            return 'el() creates elements correctly';
+        }
+
+        function testSvgCreation() {
+            var svg = SonanceUtils.createSvg(SonanceUtils.SVG_PATHS.play);
+            if (!(svg instanceof SVGElement)) throw new Error('Not an SVG element');
+            if (svg.getAttribute('viewBox') !== '0 0 24 24') throw new Error('Wrong viewBox');
+            var path = svg.querySelector('path');
+            if (!path) throw new Error('Missing path element');
+            if (path.getAttribute('d') !== SonanceUtils.SVG_PATHS.play) throw new Error('Wrong path data');
+            return 'SVG created with correct viewBox and path';
+        }
+
+    })();
+    </script>
+</body>
+</html>

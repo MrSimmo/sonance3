@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!--
+  Source for icon-oblong-1920.png (ticket-3.10 R12, D59). Rendered at exactly
+  1920x1080 by tests/tools/make-oblong-icon.js; not part of the app.
+  Opaque and full-bleed: no rounded frame corners, no transparent padding.
+  All artwork sits inside the central 80% (192..1728 x 108..972), because the
+  launcher may crop or letterbox the tile.
+  The S-wave paths are js/app.js _createLogoSvg(); the tile gradient is the
+  brand gradient #e44d8a -> #8a4dff (docs/UI-MOCKUP-REFERENCE.md).
+-->
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+    html, body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #0a0a0c;
+    }
+    .frame {
+        position: absolute;
+        left: 0; top: 0;
+        width: 1920px; height: 1080px;
+        /* Flat near-black ground (D61): a faint brand glow here cost 2.8x the
+           bytes (256,848 vs 92,455 B) for a difference barely visible on a
+           home-row tile. #0a0a0c is the legacy BG_PRIMARY. */
+        background: #0a0a0c;
+    }
+    .lockup {
+        position: absolute;
+        left: 50%; top: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        align-items: center;
+    }
+    .tile {
+        width: 440px;
+        height: 440px;
+        border-radius: 104px;
+        background: linear-gradient(135deg, #e44d8a, #8a4dff);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+    }
+    .tile svg { width: 300px; height: 300px; }
+    .words { margin-left: 84px; }
+    .name {
+        font-family: 'SamsungOne', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 216px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        line-height: 1;
+        color: #f0f0f5;
+    }
+    .by {
+        margin-top: 34px;
+        margin-left: 8px;
+        font-family: 'SamsungOne', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 52px;
+        font-weight: 600;
+        letter-spacing: 14px;
+        color: #8e8ea0;
+    }
+</style>
+</head>
+<body>
+<div class="frame">
+    <div class="lockup">
+        <div class="tile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-linecap="round">
+                <path d="M15.5,4 A7,7 0 0,0 8.5,9" stroke-width="2.4" opacity="0.95"/>
+                <path d="M8.5,9 A7,7 0 0,1 15.5,14" stroke-width="2.4" opacity="0.95"/>
+                <path d="M15.5,14 A7,7 0 0,0 8.5,19" stroke-width="2.4" opacity="0.2"/>
+                <path d="M18,5 Q20.5,7.5 18,10" stroke-width="1.6" opacity="0.5"/>
+                <path d="M20,3.5 Q23.5,7.5 20,11.5" stroke-width="1.3" opacity="0.3"/>
+                <path d="M6,10 Q3.5,12 6,14" stroke-width="1.6" opacity="0.5"/>
+                <path d="M4,8.5 Q0.5,12 4,15.5" stroke-width="1.3" opacity="0.3"/>
+            </svg>
+        </div>
+        <div class="words">
+            <div class="name">Sonance</div>
+            <div class="by">BY SIMMO</div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

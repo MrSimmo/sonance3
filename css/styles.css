@@ -1,0 +1,5254 @@
+/* ============================================
+   Sonance — Base Styles
+   Samsung Tizen TV Music Player
+   ============================================ */
+
+/* --- CSS Custom Properties --- */
+:root {
+    --bg-primary: #0a0a0c;
+    --bg-secondary: #121217;
+    --bg-card: #1a1a22;
+    --bg-elevated: #222230;
+    --bg-main: #1a1a24;
+    --accent: #e44d8a;
+    --accent-rgb: 228, 77, 138;
+    --accent-soft: rgba(var(--accent-rgb), 0.15);
+    --accent-glow: rgba(var(--accent-rgb), 0.35);
+    --text-primary: #f0f0f5;
+    --text-secondary: #8e8ea0;
+    --text-muted: #55556a;
+    --border: #2a2a38;
+    /* v3.10 R6 (D50): focus is a solid accent fill with a computed ink.
+       Pink defaults, so they hold before App.applyAccentColor() runs; it
+       sets all three next to --accent. --focus-ink-soft is the ink at 0.86
+       alpha as rgba() (no color-mix on Chromium 63). */
+    --focus-fill: var(--accent);
+    --focus-ink: #ffffff;
+    --focus-ink-soft: rgba(255, 255, 255, 0.86);
+    /* v3.10 R10 (ticket §6.6): the gradient backdrop's base and its violet
+       glow. v3.10 A5: the scrim behind the options sheet. */
+    --backdrop-top: #1d1d2c;
+    --backdrop-bottom: #121219;
+    --backdrop-violet-rgb: 88, 70, 230;
+    --scrim: rgba(10, 10, 12, 0.6);
+    /* v3.10-fix2: the scroll indicator's track (F3, D155) and Now Playing's
+       Focus-mode dim (F7, D159); docs/UI-MOCKUP-REFERENCE.md. */
+    --scroll-indicator-track: rgba(255, 255, 255, 0.12);
+    --np-focus-dim: 0.5;
+}
+
+/* --- Global Reset --- */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html, body, #app {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-main);
+    color: var(--text-primary);
+    font-family: 'SamsungOne', 'SamsungOneUIFW', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* v3.10 R4 (D49): interface size. 1rem = 10px at 100%, and every length in
+   this file is rem except hairline borders and the NP backdrop blur. The
+   <head> script in index.html overrides this inline with 10px x the stored
+   scale before first paint. Never CSS zoom (D49). */
+html {
+    font-size: 10px;
+}
+
+/* The UA default is 16px, and every element without its own font-size
+   inherits it from body. Restated in rem so it scales; without it those
+   elements would drop to the 10px root at 100%. */
+body {
+    font-size: 1.6rem;
+}
+
+/* --- Scrollbar hidden globally on TV (V3-5) --- */
+::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+/* --- Focus Ring --- */
+/* Remove all default browser focus outlines */
+*:focus {
+    outline: none;
+}
+
+/* V3-4: focusable base — no generic outline. Individual card/row rules
+   below define focus via transform/background only (GPU-composited). */
+.focusable {
+    /* transitions defined per-class; keep no global `transition: all` */
+}
+
+/* V3-4: no default focus ring. Specific card/row rules add scale + bg. */
+.focusable.focused {
+    outline: none;
+}
+
+/* --- V3-6: Lazy-loaded image fade-in ---
+   Cover-art <img> elements created by SonanceComponents start hidden over
+   their placeholder. Once LazyLoader assigns src + .loaded the GPU-only
+   opacity transition fades the real image in. Background is transparent —
+   the placeholder underneath shows through during load. */
+.lazy-art {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.lazy-art.loaded {
+    opacity: 1;
+}
+
+/* --- Screen Base --- */
+.screen {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: none;
+}
+
+.screen.active {
+    display: flex;
+}
+
+/* --- Equaliser Bar Animation --- */
+/* V3.9 T1: was `height: 4px/16px/8px/20px`, the one layout-animating rule
+   in the stylesheet — four bars dirtying layout at 60 fps for as long as the
+   Album screen is open. The bar is now a fixed 20px (the height of its
+   .track-row-eq parent) scaled from its bottom edge, so the same four
+   silhouettes are produced on the compositor. Scale factors are the old
+   pixel heights over 20. */
+@keyframes barBounce {
+    0%, 100% { transform: scaleY(0.2); }
+    25% { transform: scaleY(0.8); }
+    50% { transform: scaleY(0.4); }
+    75% { transform: scaleY(1); }
+}
+
+.eq-bar {
+    width: 0.3rem;
+    height: 2rem;
+    /* Bars 2-4 carry an animation-delay. The old rule gave .eq-bar no base
+       height at all, so during its delay a bar was 0px and invisible;
+       scaleY(0) reproduces that exactly rather than flashing a full-height
+       bar for 0.1-0.3s at mount. The animation overrides it once it runs. */
+    transform: scaleY(0);
+    transform-origin: bottom center;
+    background: var(--accent);
+    border-radius: 0.1rem;
+    animation: barBounce 0.8s ease-in-out infinite;
+    display: inline-block;
+    vertical-align: bottom;
+    margin-right: 0.2rem;
+}
+
+.eq-bar:nth-child(2) { animation-delay: 0.1s; }
+.eq-bar:nth-child(3) { animation-delay: 0.2s; }
+.eq-bar:nth-child(4) { animation-delay: 0.3s; }
+
+/* ============================================
+   Login Screen
+   ============================================ */
+.login-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-primary);
+}
+
+.login-card {
+    width: 100%;
+    max-width: 44rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 1.6rem;
+    padding: 4rem;
+}
+
+/* Logo area in login card */
+.login-logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 3.6rem;
+}
+
+.login-logo-icon {
+    width: 5.6rem;
+    height: 5.6rem;
+    border-radius: 1.4rem;
+    background: linear-gradient(135deg, var(--accent), #8a4dff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.4rem;
+}
+
+.login-logo-icon svg {
+    width: 3rem;
+    height: 3rem;
+    fill: white;
+}
+
+.login-logo-title {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.05rem;
+}
+
+.login-logo-subtitle {
+    font-size: 1rem;
+    color: var(--text-muted);
+    letter-spacing: 0.15rem;
+    text-transform: uppercase;
+    margin-top: 0.4rem;
+}
+
+/* Form fields */
+.login-field {
+    margin-bottom: 1.8rem;
+}
+
+.login-field label {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 0.6rem;
+}
+
+.login-field input {
+    width: 100%;
+    padding: 1.4rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 1.2rem;
+    color: var(--text-primary);
+    font-size: 1.4rem;
+    font-family: inherit;
+}
+
+.login-field input::placeholder {
+    color: var(--text-muted);
+}
+
+.login-field input:focus,
+.login-field input:active,
+.login-field input:focus-visible {
+    outline: none !important;
+    -webkit-appearance: none;
+    -webkit-tap-highlight-color: transparent;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 0.2rem rgba(var(--accent-rgb), 0.3) !important;
+}
+
+/* Server URL row — side by side */
+.login-server-row {
+    display: flex;
+}
+
+.login-server-row > * + * {
+    margin-left: 1.2rem;
+}
+
+.login-server-row .login-field:first-child {
+    flex: 1;
+}
+
+.login-server-row .login-field:last-child {
+    width: 10rem;
+}
+
+/* Connect button */
+.login-btn {
+    width: 100%;
+    padding: 1.4rem;
+    background: var(--accent);
+    border: none;
+    border-radius: 1.2rem;
+    color: #fff;
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    margin-top: 0.8rem;
+}
+
+.login-btn:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 0.2rem var(--accent);
+    transform: none;
+}
+
+.login-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Error message */
+.login-error {
+    margin-top: 1.6rem;
+    padding: 1.2rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 1rem;
+    color: #ef4444;
+    font-size: 1.3rem;
+    text-align: center;
+    display: none;
+}
+
+.login-error.visible {
+    display: block;
+}
+
+/* ============================================
+   App Shell Layout (v3 — top nav + centred content)
+   ============================================ */
+.app-layout {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+/* v3.10 R10 (ticket §6.6): Settings -> Appearance -> Background "Gradient".
+   One layer, the shell's first child, so #page-container (and a page and
+   its transition ghost, both transparent) paint over it; with Solid it is
+   not drawn at all. Painted once: no animation, no will-change. Absolute in
+   the full-viewport .app-layout, not fixed (D130): fixed, Chromium gave it
+   its own 1920x1080 compositor layer ("overlaps composited content") and
+   the colour-hint bar another, +2 layers at rest; absolute, it paints into
+   the root layer, as many layers as Solid. Nothing scrolls the root, so it
+   stays put either way. Each radial fades to its own colour at alpha 0, not
+   `transparent`, so a non-premultiplied gradient cannot fade through grey.
+   Now Playing covers it with an opaque base (.np-screen); Login is drawn
+   before the shell. */
+.app-backdrop {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse at 12% -12%, rgba(var(--accent-rgb), 0.42), rgba(var(--accent-rgb), 0) 62%),
+        radial-gradient(ellipse at 100% 115%, rgba(var(--backdrop-violet-rgb), 0.4), rgba(var(--backdrop-violet-rgb), 0) 60%),
+        linear-gradient(180deg, var(--backdrop-top), var(--backdrop-bottom));
+}
+
+html.backdrop-gradient .app-backdrop {
+    display: block;
+}
+
+/* ============================================
+   Status dot (Settings page)
+   ============================================ */
+.settings-status-dot {
+    display: inline-block;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    background: #34d399;
+    margin-right: 0.8rem;
+    vertical-align: middle;
+}
+
+.settings-status-dot.disconnected {
+    background: #ef4444;
+}
+
+/* ============================================
+   Top Navigation Bar (v3)
+   Floating pill with sliding pill highlight
+   ============================================ */
+#top-nav {
+    position: fixed;
+    top: 2.4rem;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+}
+
+#top-nav-bar {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    background: rgba(50, 50, 60, 0.85);
+    border-radius: 2.5rem;
+    padding: 0.4rem 0.6rem;
+    pointer-events: auto;
+}
+
+.top-nav-items {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+}
+
+.top-nav-item {
+    position: relative;
+    z-index: 2;
+    padding: 0.8rem 2rem;
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.55);
+    white-space: nowrap;
+    margin: 0 0.2rem;  /* NOT flex gap */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3.4rem;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    border-radius: 2rem;
+}
+
+.top-nav-item svg {
+    width: 1.8rem;
+    height: 1.8rem;
+    display: block;
+}
+
+.top-nav-item.focused {
+    color: white;
+    font-weight: 600;
+}
+
+.top-nav-item.selected {
+    color: white;
+    font-weight: 600;
+}
+
+/* Sliding pill highlight — GPU-only: fixed base width, animate via
+   translateX + scaleX. transform-origin:left so scaleX grows rightward
+   from the anchor point. */
+#top-nav-pill {
+    position: absolute;
+    top: 0.4rem;
+    left: 0;
+    width: 10rem;
+    height: calc(100% - 0.8rem);
+    border-radius: 2rem;
+    z-index: 1;
+    transform-origin: left center;
+    transition: transform 0.25s ease;
+    will-change: transform;
+    pointer-events: none;
+    background: transparent;
+}
+
+/* Focused state (nav bar active — user is browsing nav items) — solid
+   focus fill (v3.10 R6, D50). */
+#top-nav-pill.focused {
+    background: var(--focus-fill);
+    box-shadow: 0 0.2rem 1.2rem rgba(0, 0, 0, 0.3);
+}
+
+/* D71: the label on the pill takes its colour from the pill's own state, so
+   the two can never disagree (white-on-white when they diverged). The pill
+   always sits on the .selected item. */
+#top-nav-pill.focused ~ .top-nav-items .top-nav-item.selected {
+    color: var(--focus-ink);
+}
+
+/* Selected state (user has entered page content) — subtle grey indicator */
+#top-nav-pill.selected {
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: none;
+}
+
+/* ============================================
+   Page Container (v3)
+   Holds the currently-rendered screen + transition ghost
+   ============================================ */
+#page-container {
+    position: fixed;
+    top: 8rem;      /* clear the nav bar */
+    left: 0;
+    right: 0;
+    bottom: 7.6rem;   /* clear the NP bar */
+    overflow: hidden;
+}
+
+#page-container.no-nav {
+    top: 0;
+}
+
+#page-container.no-np-bar {
+    bottom: 0;
+}
+
+.page-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;  /* screens manage their own scroll */
+    /* V3.9 T4: no static `will-change` here. It pinned a full-viewport
+       (~1920x1080 x2) compositor layer for the whole session and made the
+       clears in _applySlideTransition / _applyZoomTransition (js/app.js)
+       no-ops, because CSS re-asserted the hint immediately. Those functions
+       now own the hint for the duration of the transition only. */
+    transform: translateX(0);
+    opacity: 1;
+    padding: 2.8rem 4.8rem 2rem;
+    box-sizing: border-box;
+}
+
+/* Centre the page content within the full 1920px width (max 1600px).
+   v3.10 D98: every #page-current layout rule has a twin for the transition
+   ghost (the demoted layer keeps its classes but loses the id), so a ghost's
+   content does not move at the first frame of a transition. */
+#page-current > *,
+#page-container > .page-ghost > * {
+    max-width: 160rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.page-ghost {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    pointer-events: none;
+    /* V3.9 T4: hint set dynamically by the transition helpers in js/app.js —
+       a ghost only exists for the ~250ms of a transition. */
+    z-index: 1;
+}
+
+/* Centred page content wrapper */
+.page-content {
+    max-width: 160rem;
+    margin: 0 auto;
+    padding: 2.8rem 4.8rem 2rem;
+}
+
+/* Legacy content-area compatibility — many screens still expect this as the
+   scrolling container. The page-layer itself is the scroller now.
+   Scoped to NOT apply to .page-layer so it can't override the page layer's
+   absolute positioning (which would collapse it to 0 height and break NP). */
+.content-area:not(.page-layer) {
+    overflow: visible;
+    padding: 0;
+    position: relative;
+}
+
+/* Album detail active: prevent outer scroll, enable flex column for split pane */
+#page-current.album-active {
+    overflow: hidden !important;
+}
+
+#page-current.album-active > .page-content {
+    display: flex !important;
+    flex-direction: column !important;
+    padding-bottom: 0.8rem !important;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+/* ============================================
+   Now Playing Bar (76px) — fixed full-width bottom bar (v3)
+   ============================================ */
+.now-playing-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 7.6rem;
+    background: rgba(34, 34, 48, 0.95);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 2.4rem;
+    z-index: 50;
+}
+
+.now-playing-bar .mini-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 0.2rem;
+    width: 100%;
+    background: var(--accent);
+    transform-origin: left center;
+    transform: scaleX(var(--progress, 0));
+    transition: transform 0.3s linear;
+    will-change: transform;
+}
+
+.now-playing-bar-left {
+    display: flex;
+    align-items: center;
+    /* v3.10 R9: sized to its content, so its focused pill hugs the art,
+       text and hint; the centre controls keep the right end (margin-left:
+       auto below). It still shrinks, truncating the text, if space runs out. */
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.now-playing-bar-left > * + * {
+    margin-left: 1.4rem;
+}
+
+/* v3.10 R9 (D56, D80): the bar's first focus target, "open Now Playing".
+   The padding and the matching negative margin keep the art where it was. */
+.np-bar-open {
+    border-radius: 1.4rem;
+    padding: 0.8rem 1.6rem 0.8rem 0.8rem;
+    margin-left: -0.8rem;
+}
+
+.np-bar-open.focused {
+    background: var(--focus-fill);
+}
+
+.np-bar-open.focused .now-playing-bar-title {
+    color: var(--focus-ink);
+}
+
+.np-bar-open.focused .now-playing-bar-artist {
+    color: var(--focus-ink-soft);
+}
+
+/* "OK -> Now Playing" (mockup 11). Always laid out, transparent until
+   focused, so focusing the pill changes no layout. */
+.np-bar-open-hint {
+    flex-shrink: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.2rem;
+    text-transform: uppercase;
+    color: var(--focus-ink);
+    white-space: nowrap;
+    opacity: 0;
+}
+
+.now-playing-bar-left > .np-bar-open-hint {
+    margin-left: 2.4rem;
+}
+
+.np-bar-open.focused .np-bar-open-hint {
+    opacity: 1;
+}
+
+.now-playing-bar-art {
+    width: 4.8rem;
+    height: 4.8rem;
+    border-radius: 0.6rem;
+    background: var(--bg-card);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.now-playing-bar-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.now-playing-bar-info {
+    min-width: 0;
+}
+
+.now-playing-bar-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.now-playing-bar-artist {
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.now-playing-bar-center {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+.now-playing-bar-center > * + * {
+    margin-left: 2rem;
+}
+
+.now-playing-bar-center button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.now-playing-bar-center button svg {
+    width: 2rem;
+    height: 2rem;
+    fill: currentColor;
+}
+
+/* Now playing bar button focus state (v3.10 R6): a circular focus-fill
+   platter with the icon in ink. It was an icon tint only. */
+.np-bar-btn.focused {
+    outline: none !important;
+    border-radius: 50%;
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    box-shadow: none;
+    transform: none;
+}
+
+/* NP bar play button: white circle at rest, focus fill when focused */
+.play-btn-main.focused {
+    outline: none !important;
+    background: var(--focus-fill) !important;
+    box-shadow: none;
+    transform: none;
+}
+
+.play-btn-main.focused svg {
+    fill: var(--focus-ink) !important;
+}
+
+.play-btn-main {
+    width: 4.2rem;
+    height: 4.2rem;
+    border-radius: 50%;
+    background: #fff !important;
+    color: var(--bg-primary) !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.play-btn-main svg {
+    width: 1.8rem;
+    height: 1.8rem;
+    fill: var(--bg-primary) !important;
+}
+
+.now-playing-bar-right {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.now-playing-bar-right > * + * {
+    margin-left: 1.2rem;
+}
+
+.volume-icon {
+    color: var(--text-muted);
+}
+
+.volume-icon svg {
+    width: 1.8rem;
+    height: 1.8rem;
+    fill: currentColor;
+}
+
+.mini-volume-bar {
+    width: 8rem;
+    height: 0.3rem;
+    background: var(--border);
+    border-radius: 0.2rem;
+    overflow: hidden;
+}
+
+.mini-volume-fill {
+    height: 100%;
+    width: 100%;
+    background: var(--text-muted);
+    border-radius: 0.2rem;
+    transform-origin: left center;
+    transform: scaleX(var(--progress, 1));
+    transition: transform 0.2s ease;
+    will-change: transform;
+}
+
+/* ============================================
+   Now Playing Screen (Full-screen)
+   ============================================ */
+.np-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+}
+
+/* v3.10 R10: with the gradient on, Now Playing gets an opaque base, so the
+   gradient never shows through its backdrop (and a rise or sink does not
+   flash it). The colour is #app's, what shows through with Solid; scoped
+   to Gradient because painting it here, not on #app, moves the blurred
+   backdrop's blend by up to 2/255 (D132), and Solid stays as it was. */
+html.backdrop-gradient .np-screen {
+    background: var(--bg-main);
+}
+
+.np-screen-bg {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    z-index: 0;
+    opacity: 0.6;
+}
+
+.np-screen-overlay-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 30%;
+    background: linear-gradient(to bottom, rgba(10, 10, 12, 0.8), transparent);
+    z-index: 1;
+    pointer-events: none;
+}
+
+.np-screen-overlay-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40%;
+    background: linear-gradient(to top, rgba(10, 10, 12, 0.85), transparent);
+    z-index: 1;
+    pointer-events: none;
+}
+
+.np-screen-content {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 60rem;
+    width: 100%;
+    padding: 2rem;
+}
+
+.np-screen-art {
+    width: 28rem;
+    height: 28rem;
+    margin-bottom: 2.8rem;
+    position: relative;
+}
+
+.np-screen-art-inner {
+    width: 28rem;
+    height: 28rem;
+    border-radius: 1.6rem;
+    overflow: hidden;
+    box-shadow: 0 0.8rem 4rem rgba(0, 0, 0, 0.5);
+}
+
+.np-screen-title {
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    margin-bottom: 0.6rem;
+}
+
+.np-screen-subtitle {
+    font-size: 1.7rem;
+    color: var(--text-secondary);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    margin-bottom: 2.8rem;
+}
+
+/* Progress bar */
+.np-screen-progress-wrap {
+    width: 100%;
+    margin-bottom: 2rem;
+}
+
+.np-screen-progress {
+    width: 100%;
+    height: 2.4rem;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 0.8rem 0;
+}
+
+.np-screen-progress.focused {
+    outline: none;
+    transform: none;
+}
+
+/* Focused scrubber: scale it up via transform only — height stays fixed
+   so no layout-triggering transition. */
+.np-screen-progress.focused .np-screen-progress-scrubber {
+    transform: translateX(var(--scrub-x, 0rem)) scale(2);
+    background: var(--focus-fill);
+    box-shadow: 0 0 1rem rgba(var(--accent-rgb), 0.6);
+}
+
+.np-screen-progress-track {
+    position: relative;
+    width: 100%;
+    height: 0.6rem;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 0.3rem;
+}
+
+/* GPU-safe fill: width stays 100%, we animate transform: scaleX via
+   JS (which writes --progress). transform-origin: left keeps growth
+   anchored at the start of the bar. */
+.np-screen-progress-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(to right, var(--accent), rgba(var(--accent-rgb), 0.75));
+    border-radius: 0.3rem;
+    transform-origin: left center;
+    transform: scaleX(var(--progress, 0));
+    transition: transform 0.3s linear;
+    will-change: transform;
+}
+
+/* GPU-safe scrubber: positioned via transform: translateX in pixels
+   (--scrub-x written by JS using the track width). Base rests at left:0
+   then translates. No left/width transitions. */
+.np-screen-progress-scrubber {
+    position: absolute;
+    top: 50%;
+    left: -0.65rem;
+    margin-top: -0.65rem;
+    width: 1.3rem;
+    height: 1.3rem;
+    background: white;
+    border-radius: 50%;
+    transform: translateX(var(--scrub-x, 0rem));
+    box-shadow: 0 0 0.6rem rgba(var(--accent-rgb), 0.4);
+    transition: transform 0.3s linear;
+    will-change: transform;
+}
+
+.np-screen-time-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.4rem;
+}
+
+.np-screen-time {
+    font-size: 1.3rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Transport controls */
+.np-screen-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 3.2rem;
+}
+
+/* v3.10 R7: 2rem (was 2.8rem) so the eight buttons, with ⓘ, fit the 48rem
+   column (47.2rem at 100 %, measured; seven at 2.8rem were 46rem).
+   v3.10-fix2 F7 (D158): 1.2rem for nine, with Focus mode: 37.2rem of
+   buttons plus eight gaps is 46.8rem. */
+.np-screen-controls > * + * {
+    margin-left: 1.2rem;
+}
+
+.np-ctrl-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    position: relative;
+}
+
+.np-ctrl-btn.focused {
+    outline: none !important;
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    transform: none;
+    box-shadow: none;
+}
+
+.np-ctrl-btn svg {
+    fill: currentColor;
+}
+
+/* v3.10 R6: the platter is --focus-fill, so an active toggle's accent icon
+   (below) would vanish on it. Ink wins while focused. */
+.np-screen-controls .np-ctrl-btn.focused svg {
+    fill: var(--focus-ink);
+}
+
+.np-ctrl-toggle.active {
+    color: var(--accent);
+}
+
+.np-ctrl-toggle.active svg {
+    fill: var(--accent);
+}
+
+.np-ctrl-play {
+    width: 5.2rem;
+    height: 5.2rem;
+    border-radius: 1.6rem;
+    background: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.np-ctrl-play svg {
+    fill: var(--bg-primary);
+}
+
+.np-ctrl-play.focused {
+    outline: none !important;
+    transform: none;
+    width: 5.2rem;
+    height: 5.2rem;
+    border-radius: 1.6rem;
+    background: var(--focus-fill);
+    box-shadow: 0 0 2.4rem rgba(var(--accent-rgb), 0.4);
+}
+
+.np-ctrl-play.focused svg {
+    fill: var(--focus-ink);
+}
+
+.np-repeat-badge {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--bg-primary);
+    border-radius: 50%;
+    width: 1.4rem;
+    height: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Volume bar */
+.np-screen-volume {
+    display: flex;
+    align-items: center;
+    opacity: 0.6;
+    color: var(--text-muted);
+}
+
+.np-screen-volume > * + * {
+    margin-left: 1.2rem;
+}
+
+.np-screen-volume-bar {
+    width: 12rem;
+    height: 0.3rem;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 0.2rem;
+    overflow: hidden;
+}
+
+.np-screen-volume-fill {
+    height: 100%;
+    width: 100%;
+    background: var(--text-secondary);
+    border-radius: 0.2rem;
+    transform-origin: left center;
+    transform: scaleX(0.7);
+    transition: transform 0.2s ease;
+    will-change: transform;
+}
+
+/* ============================================
+   Queue Screen
+   ============================================ */
+.queue-screen {
+    display: flex;
+    padding: 0 0.8rem;
+    height: 100%;
+    overflow: hidden;
+}
+
+.queue-screen > * + * {
+    margin-left: 3.2rem;
+}
+
+.queue-left {
+    width: 32rem;
+    flex-shrink: 0;
+}
+
+.queue-right {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    position: relative;
+}
+
+.queue-section-heading {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 1.6rem;
+}
+
+/* Now Playing card */
+.queue-np-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 1.4rem;
+    padding: 2rem;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    will-change: transform;
+    /* D76: grows from its left edge, so its ring keeps inside the 0.8rem
+       .queue-screen padding. */
+    transform-origin: left center;
+}
+
+/* v3.10 R6 (D73): the card ring + deep shadow. It keeps scale(1.04): a
+   28rem card at the card scale of 1.12 would leave its 32rem column. */
+.queue-np-card.focused {
+    outline: none !important;
+    box-shadow: 0 0 0 0.4rem var(--focus-fill), 0 2.2rem 4.4rem rgba(0, 0, 0, 0.7);
+    border-color: var(--border) !important;
+    transform: scale(1.04);
+    z-index: 5;
+}
+
+.queue-np-art {
+    width: 28rem;
+    height: 28rem;
+    /* v3.10 D84 (D108): the card is one focus target, so at 175-200 % it
+       cannot be scrolled into view whole; its art gives way to the page
+       height instead (40rem = the nav offset, headings, the card's text and
+       padding, the bar, and room for the 1.04 focus scale and ring).
+       Below 175 % the cap is larger than the art and changes nothing. */
+    max-width: calc(100vh - 40rem);
+    max-height: calc(100vh - 40rem);
+    border-radius: 1rem;
+    overflow: hidden;
+    margin-bottom: 1.6rem;
+}
+
+.queue-np-art .album-art {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.queue-np-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.4rem;
+}
+
+.queue-np-artist {
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 1.6rem;
+}
+
+.queue-np-progress-wrap {
+    width: 100%;
+}
+
+.queue-np-progress {
+    width: 100%;
+    height: 0.3rem;
+    background: var(--border);
+    border-radius: 0.2rem;
+    overflow: hidden;
+    margin-bottom: 0.6rem;
+}
+
+.queue-np-progress-fill {
+    height: 100%;
+    width: 100%;
+    background: var(--accent);
+    border-radius: 0.2rem;
+    transform-origin: left center;
+    transform: scaleX(var(--progress, 0));
+    transition: transform 0.3s linear;
+    will-change: transform;
+}
+
+.queue-np-time-row {
+    display: flex;
+    justify-content: space-between;
+}
+
+.queue-np-time {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Queue list rows (V3-4: centred narrow list) */
+.queue-list {
+    padding-bottom: 2.4rem;
+    max-width: 100rem;
+    margin: 0 auto;
+    padding-left: 1.2rem;
+    /* D76: a focused row grows 2 % rightward (scale(1.02), left origin).
+       When the list fills .queue-right (150-175 %) that is wider than 1.2rem
+       and .queue-right clipped it. */
+    padding-right: 2.4rem;
+}
+
+.queue-empty {
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    padding: 3.2rem 0;
+    text-align: center;
+}
+
+.queue-row {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.2rem;
+    border-radius: 0.8rem;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+    /* V3-6: will-change applied dynamically to focused row only */
+    transform-origin: left center;
+}
+
+.queue-row > * + * {
+    margin-left: 1.4rem;
+}
+
+/* v3.10 R6 (D50): focused rows are a solid focus fill with ink text.
+   The 55 % tint left the number and duration illegible (mockup 04). */
+.queue-row.focused {
+    background: var(--focus-fill);
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: scale(1.02);
+}
+
+.queue-row.focused .queue-row-title,
+.queue-row.focused .queue-row-num,
+.queue-row.focused .queue-row-duration {
+    color: var(--focus-ink);
+}
+
+.queue-row.focused .queue-row-title {
+    font-weight: 600;
+}
+
+.queue-row.focused .queue-row-artist {
+    color: var(--focus-ink-soft);
+}
+
+.queue-row-num {
+    width: 2.8rem;
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.queue-row-thumb {
+    width: 4.4rem;
+    height: 4.4rem;
+    border-radius: 0.4rem;
+    background: var(--bg-card);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.queue-row-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.queue-row-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queue-row-artist {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queue-row-duration {
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+/* ============================================
+   Placeholder Screens
+   ============================================ */
+.screen-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 40rem;
+    padding: 4.8rem 3.2rem;
+    text-align: center;
+}
+
+.screen-placeholder-icon {
+    width: 5.6rem;
+    height: 5.6rem;
+    fill: var(--text-muted);
+    opacity: 0.4;
+    margin-bottom: 2rem;
+}
+
+.screen-placeholder-title {
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.8rem;
+}
+
+.screen-placeholder-subtitle {
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    max-width: 40rem;
+    line-height: 1.5;
+}
+
+/* ============================================
+   Settings Screen
+   ============================================ */
+.settings-content {
+    max-width: 52rem;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 2rem;
+}
+
+.settings-section {
+    margin-bottom: 3.6rem;
+}
+
+.settings-section-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.1rem;
+    text-transform: uppercase;
+    margin-bottom: 1.6rem;
+}
+
+.settings-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.4rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-info-label {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+}
+
+.settings-info-value {
+    font-size: 1.4rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.settings-logout-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 1.2rem 2.8rem;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 1.2rem;
+    color: #ef4444;
+    font-size: 1.4rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    will-change: transform;
+}
+
+.settings-logout-btn.focused {
+    outline: none !important;
+    transform: scale(1.04);
+    background: var(--focus-fill);
+    border-color: var(--focus-fill);
+    color: var(--focus-ink);
+}
+
+.settings-logout-hint {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    margin-top: 1rem;
+    line-height: 1.4;
+}
+
+/* --- Accent Colour Picker --- */
+.accent-picker-row {
+    padding: 1.4rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.accent-picker-label {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.4rem;
+}
+
+.accent-swatches {
+    display: block;
+    line-height: 0;
+}
+
+.accent-swatch {
+    width: 3.6rem;
+    height: 3.6rem;
+    border-radius: 50%;
+    border: 0.2rem solid transparent;
+    display: inline-block;
+    margin-right: 1.2rem;
+    margin-bottom: 0.8rem;
+    padding: 0;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: transform 0.15s ease;
+    /* V3-6: will-change applied dynamically */
+}
+
+.accent-swatch.selected {
+    border-color: white;
+    box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.3);
+}
+
+/* D74: the one focus rule without a focus token. A swatch's fill is the
+   colour it offers, so it keeps a white ring and a scale instead. */
+.accent-swatch.focused {
+    outline: none !important;
+    border-radius: 50% !important;
+    border-color: white;
+    transform: scale(1.15);
+}
+
+.accent-swatch.focused.selected {
+    border-color: white;
+    box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.5);
+}
+
+.accent-reset {
+    display: inline-block;
+    margin-top: 0.6rem;
+    padding: 0.6rem 1rem;
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.8rem;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.accent-reset.focused {
+    outline: none !important;
+    color: var(--focus-ink);
+    border-color: var(--focus-fill);
+    background: var(--focus-fill);
+}
+
+/* --- Settings Toggle Row (P15b) --- */
+.settings-toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.4rem 1.2rem;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0.8rem;
+    cursor: pointer;
+}
+
+/* v3.10 R6: the row fill, as for list rows. It was the last outline focus,
+   on --accent-soft with a background fade (colour snaps, D75). */
+.settings-toggle-row.focused {
+    background: var(--focus-fill);
+    border-bottom-color: transparent;
+}
+
+.settings-toggle-row.focused .settings-toggle-label {
+    color: var(--focus-ink);
+}
+
+.settings-toggle-label {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+}
+
+.settings-toggle-value {
+    font-size: 1.4rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.settings-toggle-row.focused .settings-toggle-value {
+    color: var(--focus-ink);
+}
+
+.settings-toggle-row.focused .settings-toggle-value::before {
+    content: "\25C4  ";
+    color: var(--focus-ink);
+}
+
+.settings-toggle-row.focused .settings-toggle-value::after {
+    content: "  \25BA";
+    color: var(--focus-ink);
+}
+
+.settings-toggle-hint {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    margin-top: 1rem;
+    line-height: 1.4;
+    padding: 0 1.2rem;
+}
+
+/* --- V3.8: Libraries multi-select rows --- */
+.settings-libraries-list {
+    display: block;
+}
+
+.settings-library-row {
+    display: flex;
+    align-items: center;
+    padding: 1.2rem;
+    border-radius: 0.8rem;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    will-change: transform, opacity;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+    /* v3.10 R6: rows grow rightward, like every other list row (D76: from
+       the centre it overhung #settings-left on the left). */
+    transform-origin: left center;
+}
+
+.settings-library-row.focused {
+    transform: scale(1.02);
+    background: var(--focus-fill);
+    border-bottom-color: transparent;
+}
+
+.settings-library-row.focused .settings-library-name {
+    color: var(--focus-ink);
+}
+
+/* The checked box is accent-filled, so on the focus fill it draws in ink. */
+.settings-library-row.focused .settings-library-checkbox {
+    border-color: var(--focus-ink);
+}
+
+.settings-library-row.is-checked.focused .settings-library-checkbox {
+    background: var(--focus-ink);
+    border-color: var(--focus-ink);
+}
+
+.settings-library-checkbox {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.4rem;
+    border: 0.2rem solid var(--text-muted);
+    margin-right: 1.4rem;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    background: transparent;
+}
+
+.settings-library-row.is-checked .settings-library-checkbox {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.settings-library-row.is-locked {
+    opacity: 0.55;
+}
+
+.settings-library-row.is-locked.focused {
+    transform: none;
+}
+
+.settings-library-name {
+    font-size: 1.4rem;
+    color: var(--text-primary);
+}
+
+.settings-libraries-hint {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    margin-top: 1rem;
+    line-height: 1.4;
+    padding: 0 1.2rem;
+}
+
+/* --- P15c: Two-column Settings layout --- */
+.settings-layout {
+    display: flex;
+    height: 100%;
+    /* D76: visible, so the room .settings-left makes on its left (below) is
+       not cut again here. Nothing overflows it otherwise: the left column
+       scrolls itself and the About card is short. */
+    overflow: visible;
+}
+
+.settings-left {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* D76: the clip edge moves 1.2rem into the page padding so focused
+       swatches, rows and Logout are not cut on the left; the content stays
+       where it was. position: relative makes this the offsetParent that
+       settings.js _scrollFocusedIntoView measures offsetTop against (it was
+       #page-current, so the follow scroll was out by the page padding). */
+    position: relative;
+    margin-left: -1.2rem;
+    padding-left: 1.2rem;
+    padding-right: 4rem; /* NOT flex gap — Chromium 63 */
+    padding-bottom: 2rem;
+    min-height: 0;       /* allow flex child to scroll */
+    max-width: 73.2rem;  /* 72rem + the D76 1.2rem, so the content box is unchanged */
+}
+
+.settings-right {
+    width: 28rem;
+    flex-shrink: 0;
+    padding-top: 0.8rem;
+}
+
+.settings-about {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 1.2rem;
+    padding: 2rem 2.4rem;
+    border: 1px solid var(--border);
+}
+
+.settings-about-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.4rem;
+}
+
+.settings-about-subtitle {
+    font-size: 1.3rem;
+    color: var(--accent);
+    margin-bottom: 1.6rem;
+}
+
+.settings-about-row {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.6rem;
+}
+
+.settings-about-row:last-child {
+    margin-bottom: 0;
+}
+
+/* ============================================
+   Loading Skeletons
+   ============================================ */
+@keyframes skeleton-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.25; }
+}
+
+.skeleton {
+    background: var(--bg-card);
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+    border-radius: 1rem;
+}
+
+.skeleton-card {
+    border-radius: 1rem;
+}
+
+.skeleton-song-row {
+    height: 5.6rem;
+    margin-bottom: 0.4rem;
+    border-radius: 0.8rem;
+}
+
+.skeleton-grid-card {
+    padding-top: 100%;
+    border-radius: 1rem;
+}
+
+/* ============================================
+   Album Art Component
+   ============================================ */
+.album-art {
+    overflow: hidden;
+    position: relative;
+    background: var(--bg-card);
+}
+
+.album-art img {
+    display: block;
+}
+
+/* Fill-parent mode (for grid layouts) */
+.album-art-fill {
+    width: 100%;
+    padding-top: 100%; /* 1:1 aspect ratio */
+}
+
+/* V3.9 T5: the album placeholder's vinyl mark, formerly 6 SVG nodes and 28
+   setAttribute calls built per card (js/components.js _createVinylSvg) and
+   rebuilt on every VirtualGrid recycle. Ring radii are the SVG's, converted
+   to percentages of the gradient's closest-side extent: the old viewBox was
+   0 0 100 100 in a 45%-wide box, so SVG r maps to (r / 50) * 100 %. Rings
+   at r 42/34/26/8 with stroke-width 1.5 become bands of +/-3 % around
+   84/68/52/16 %, and the filled r-4 centre dot becomes a 0-8 % disc.
+   .art-placeholder is a centring flex container, so the pseudo-element only
+   needs a size. Artist placeholders keep their person silhouette and do not
+   carry this class. */
+.art-placeholder-vinyl::after {
+    content: '';
+    width: 45%;
+    height: 45%;
+    flex-shrink: 0;
+    opacity: 0.25;
+    background: radial-gradient(circle closest-side,
+        #fff 0%, #fff 8%,
+        transparent 8%, transparent 14.5%,
+        #fff 14.5%, #fff 17.5%,
+        transparent 17.5%, transparent 50.5%,
+        #fff 50.5%, #fff 53.5%,
+        transparent 53.5%, transparent 66.5%,
+        #fff 66.5%, #fff 69.5%,
+        transparent 69.5%, transparent 82.5%,
+        #fff 82.5%, #fff 85.5%,
+        transparent 85.5%);
+}
+
+.album-art-fill > img,
+.album-art-fill > .art-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Artist avatar */
+.artist-avatar {
+    overflow: hidden;
+    background: var(--bg-card);
+    border-radius: 50%;
+}
+
+/* ============================================
+   Home Screen
+   ============================================ */
+.home-screen {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 2rem;
+    position: relative;
+}
+
+/* Hero Banner */
+.home-hero {
+    height: 28rem;
+    border-radius: 1.6rem;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    padding: 4rem;
+    position: relative;
+    margin-bottom: 1.2rem;
+    background: var(--bg-primary);
+}
+
+.home-hero > * + * {
+    margin-left: 3.6rem;
+}
+
+.home-hero-skeleton {
+    width: 100%;
+    height: 100%;
+    border-radius: 1.6rem;
+}
+
+.home-hero-art {
+    flex-shrink: 0;
+    position: relative;
+}
+
+.home-hero-art .album-art {
+    position: relative;
+    z-index: 1;
+    box-shadow: 0 0.8rem 3.2rem rgba(0, 0, 0, 0.4);
+}
+
+.hero-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 32rem;
+    height: 32rem;
+    background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.home-hero-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
+.home-hero-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 3.6rem 4.4rem;
+}
+
+.home-hero-label {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.2rem;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+}
+
+.home-hero-title {
+    font-size: 3.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.home-hero-subtitle {
+    font-size: 1.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+}
+
+.home-hero-buttons {
+    display: flex;
+    margin-top: 2rem;
+}
+
+.home-hero-buttons > * + * {
+    margin-left: 1.4rem;
+}
+
+.hero-play-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 1rem 2.8rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 2.4rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    will-change: transform;
+}
+
+.hero-play-btn > * + * {
+    margin-left: 0.8rem;
+}
+
+.hero-play-btn.focused {
+    outline: none !important;
+    transform: scale(1.06);
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+.hero-shuffle-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 1rem 2.8rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 2.4rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    will-change: transform;
+}
+
+.hero-shuffle-btn > * + * {
+    margin-left: 0.8rem;
+}
+
+.hero-shuffle-btn.focused {
+    outline: none !important;
+    transform: scale(1.06);
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+/* Sections */
+.home-section {
+    margin-bottom: 3.2rem;
+}
+
+.home-section-heading {
+    font-size: 1.8rem;
+    font-weight: 600;
+    letter-spacing: 0.05rem;
+    color: var(--text-primary);
+    margin-bottom: 1.8rem;
+}
+
+/* Horizontal scrolling row (V3-4: extra vertical padding so scaled cards
+   don't clip). overflow-x: auto makes overflow-y compute to auto as well, so
+   the padding is the only room: D76 raised it from 1.6rem to 2rem for the
+   v3.10 card focus (scale 1.12 plus a 0.4rem ring overhangs 1.4-1.9rem).
+   js/screens/home.js _scrollRowToFocused reads the same 2rem. */
+.home-row {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding: 2rem 2rem 2.8rem;
+    scroll-behavior: smooth;
+}
+
+.home-row > * + * {
+    margin-left: 1.8rem;
+}
+
+.home-row::-webkit-scrollbar {
+    display: none;
+}
+
+/* Album Card (horizontal row) */
+.album-card {
+    flex-shrink: 0;
+    width: 16.2rem;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    /* V3-6: will-change applied dynamically to focused card only */
+    transform-origin: center center;
+    border-radius: 1rem;
+    padding-bottom: 0.4rem;
+    /* V3.8-fix2 (was V3-6-fix3 GFX-1 for grid cards): force the card
+       onto its own compositor layer at rest so the focused scale
+       doesn't briefly drop the border-radius clip on neighbouring
+       cards' cover art (Tizen 5.0 / Chromium 63 layer recomposition
+       artefact). */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+/* v3.10 R6 (D50, D73): card focus is a bigger scale plus a ring and a deep
+   shadow on the cover; nothing on the card box itself. */
+.album-card.focused {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+    /* V3.8-fix2: keep translateZ on focus so the focused state stays
+       on the same compositor layer as the at-rest state. */
+    transform: scale(1.12) translateZ(0);
+    z-index: 5;
+}
+
+/* The card ring (a box-shadow, allowed for cards only) then the shadow */
+.album-card.focused .album-art,
+.album-card.focused .album-card-art,
+.album-card.focused .album-art-fill {
+    box-shadow: 0 0 0 0.4rem var(--focus-fill), 0 2.2rem 4.4rem rgba(0, 0, 0, 0.7);
+}
+
+.album-card-title {
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: rgba(240, 240, 245, 0.72);
+    margin-top: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.album-card.focused .album-card-title {
+    color: #fff;
+    font-weight: 700;
+}
+
+.album-card-artist {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.2rem;
+}
+
+/* Playlist Card — v3.10 A3 (mockup 15): an art + label card, in the
+   Playlists grid (the cell's width) and Home's "Your Playlists" row
+   (16.2rem, as .album-card). It was a 23rem gradient tile with the name
+   inside; the gradient is now the art's fallback (SonanceComponents
+   .renderPlaylistCard). */
+.playlist-card {
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    /* V3-6: will-change applied dynamically */
+    transform-origin: center center;
+    padding-bottom: 0.4rem;
+}
+
+.home-row .playlist-card {
+    flex-shrink: 0;
+    width: 16.2rem;
+}
+
+/* Square at any width: the box is as tall as it is wide. */
+.playlist-card-art {
+    position: relative;
+    width: 100%;
+    padding-top: 100%;
+    border-radius: 1.4rem;
+    overflow: hidden;
+}
+
+.home-row .playlist-card-art {
+    border-radius: 1rem;
+}
+
+.playlist-card-glyph {
+    position: absolute;
+    top: 30%;
+    left: 30%;
+    width: 40%;
+    height: 40%;
+    fill: #fff;
+    opacity: 0.3;
+}
+
+.playlist-card-art img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* v3.10 R6 (D73, A3): a card now, so the ring and the deep shadow go on the
+   art and the label takes the card rule. */
+.playlist-card.focused {
+    outline: none !important;
+    transform: scale(1.12);
+    z-index: 5;
+}
+
+.playlist-card.focused .playlist-card-art {
+    box-shadow: 0 0 0 0.4rem var(--focus-fill), 0 2.2rem 4.4rem rgba(0, 0, 0, 0.7);
+}
+
+.playlist-card-name {
+    margin-top: 1rem;
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: rgba(240, 240, 245, 0.72);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playlist-card.focused .playlist-card-name {
+    color: #fff;
+    font-weight: 700;
+}
+
+.playlist-card-count {
+    margin-top: 0.2rem;
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.playlists-grid .playlist-card-name,
+.playlists-grid .playlist-card-count {
+    text-align: center;
+}
+
+.playlist-card-skeleton {
+    padding-top: 100%;
+    border-radius: 1.4rem;
+}
+
+/* Empty + Error states */
+.home-empty {
+    padding: 2.4rem;
+    color: var(--text-muted);
+    font-size: 1.4rem;
+}
+
+.home-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 2.4rem;
+}
+
+.home-error-text {
+    color: var(--text-muted);
+    font-size: 1.6rem;
+}
+
+/* ============================================
+   Library Screen (V3-3 — vertical pill sub-nav)
+   ============================================ */
+.library-screen {
+    display: flex;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Vertical pill sub-nav (left side, top-aligned with content grid) */
+.library-subnav {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    background: rgba(30, 30, 38, 0.60);
+    border-radius: 2rem;
+    padding: 0.6rem;
+    z-index: 10;
+    width: 14rem;
+    box-sizing: border-box;
+}
+
+.library-subnav-item {
+    position: relative;
+    z-index: 2;
+    padding: 1rem 2rem;
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.55);
+    border-radius: 1.6rem;
+    text-align: center;
+    cursor: pointer;
+    font-family: inherit;
+    /* No colour transition: the label must flip with its pill (D71, D75). */
+    margin: 0.2rem 0;  /* NOT flex gap */
+}
+
+.library-subnav-item.focused {
+    color: white;
+    font-weight: 600;
+}
+
+.library-subnav-item.selected {
+    color: white;
+    font-weight: 600;
+}
+
+/* Sliding vertical pill */
+.library-subnav-pill {
+    position: absolute;
+    left: 0.6rem;
+    right: 0.6rem;
+    top: 0;
+    border-radius: 1.6rem;
+    z-index: 1;
+    transition: transform 0.2s ease;
+    will-change: transform;
+    pointer-events: none;
+    background: transparent;
+}
+
+/* Focused = user is actively browsing the sub-nav = solid focus fill */
+.library-subnav-pill.focused {
+    background: var(--focus-fill);
+    box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.2);
+}
+
+/* D71: the label colour follows the pill's state (see the top nav). */
+.library-subnav-pill.focused ~ .library-subnav-item.selected {
+    color: var(--focus-ink);
+}
+
+/* Selected = user has moved into content, sub-nav shows current tab = GREY */
+.library-subnav-pill.selected {
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: none;
+}
+
+/* Library content area (scrollable, cleared of the sub-nav) */
+.library-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 2rem;
+    position: relative;
+    margin-left: 18rem;  /* clear the 140px sub-nav + 40px breathing room */
+    transition: opacity 0.15s ease;
+    /* V3.9 T4: no static `will-change`. This is the tallest scrolling content
+       in the app (measured 1420x1649 = 2.34 Mpx on a 50-card Albums grid, and
+       it grows with the grid), and the hint promoted all of it permanently to
+       smooth a 150ms tab cross-fade. _fadeContent in
+       js/screens/library.js now sets and clears the hint around that fade. */
+}
+
+.library-loading {
+    /* Wrapper for skeleton loaders */
+}
+
+/* Grid Layouts (V3-4: centred, with edge padding so scaled cards don't clip).
+   The library-content parent is already offset right of the sub-nav, so we
+   centre within that remaining column rather than page-centring. */
+.library-grid {
+    display: grid;
+    grid-gap: 2.2rem;
+    /* 24px vertical padding keeps the top/bottom scaled cards from clipping
+       against the scroll viewport edge; 28px horizontal matches. */
+    padding: 2.4rem 2.8rem;
+    /* Required so scale transforms don't trigger a horizontal scrollbar */
+    overflow: visible;
+}
+
+.library-albums-grid {
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    grid-gap: 2.8rem 2rem;
+    justify-content: center;
+}
+
+.library-artists-grid {
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    grid-gap: 2.4rem 1.6rem;
+    justify-content: center;
+}
+
+/* V3-6-fix2 PERF-2: virtualised artists tab. V3.9 T1: the albums tab too.
+   Mount wraps a tall spacer + an absolutely-positioned inner grid.
+   The inner grid keeps all the layout/styling rules. */
+.library-artists-virtual-mount,
+.library-albums-virtual-mount {
+    position: relative;
+    padding: 2.4rem 2.8rem;
+    overflow: visible;
+}
+
+.library-genres-grid {
+    grid-template-columns: repeat(4, 1fr);
+    grid-gap: 2.4rem 1.6rem;
+    justify-content: center;
+}
+
+/* Album Grid Card (P7.5: consistent sizes) */
+.album-grid-card {
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    /* V3-6: will-change applied dynamically to focused card only */
+    transform-origin: center center;
+    border-radius: 1rem;
+    /* V3-4: `overflow: hidden` would clip the lift shadow, keep visible */
+    overflow: visible;
+    min-width: 0;
+    /* V3-6-fix3 GFX-1: force the card onto its own compositor layer at
+       rest so the focused scale doesn't double-rasterize the title text
+       on Tizen 5.0 (Chromium 63 glyph-cache "ghost" artefact). */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.album-grid-card .album-art-fill {
+    width: 100%;
+    height: 0;
+    padding-top: 100%;
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.8rem;
+}
+
+.album-grid-card .album-art-fill > img,
+.album-grid-card .album-art-fill > .art-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* v3.10 R6: card scale + ring and deep shadow on the art */
+.album-grid-card.focused {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+    /* V3-6-fix3 GFX-1: keep translateZ so the focused state stays on the
+       same compositor layer as the at-rest state (prevents text ghosting). */
+    transform: scale(1.12) translateZ(0);
+    z-index: 5;
+}
+
+.album-grid-card.focused .album-art-fill {
+    box-shadow: 0 0 0 0.4rem var(--focus-fill), 0 2.2rem 4.4rem rgba(0, 0, 0, 0.7);
+}
+
+.album-grid-info {
+    padding: 0.8rem 0.2rem 0.4rem;
+}
+
+.album-grid-title {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: rgba(240, 240, 245, 0.72);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.album-grid-card.focused .album-grid-title {
+    color: #fff;
+    font-weight: 700;
+}
+
+.album-grid-meta {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.2rem;
+}
+
+/* Artist Grid Card */
+.artist-grid-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    padding: 0.8rem;
+    border-radius: 1.2rem;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    /* V3-6: will-change applied dynamically */
+    transform-origin: center center;
+    min-width: 0;
+    /* V3-4: allow lift shadow to extend past the card */
+    overflow: visible;
+    /* V3-6-fix3 GFX-1: dedicated compositor layer at rest — see album card */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+/* v3.10 R6: card scale + ring and deep shadow on the (circular) avatar */
+.artist-grid-card.focused {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+    /* V3-6-fix3 GFX-1: keep translateZ on focus to stay on the same layer */
+    transform: scale(1.12) translateZ(0);
+    z-index: 5;
+}
+
+.artist-grid-card.focused .artist-avatar {
+    box-shadow: 0 0 0 0.4rem var(--focus-fill), 0 2.2rem 4.4rem rgba(0, 0, 0, 0.7);
+}
+
+.artist-grid-card.focused .artist-grid-name {
+    color: #fff;
+    font-weight: 700;
+}
+
+.artist-grid-name {
+    font-size: 1.3rem;
+    font-weight: 500;
+    color: rgba(240, 240, 245, 0.72);
+    margin-top: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.artist-grid-count {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    margin-top: 0.4rem;
+}
+
+/* Song List (V3-4: padding so focused rows don't clip on scale(1.02)) */
+.library-song-list {
+    padding: 1.2rem 2.8rem 2rem;
+    max-width: 120rem;
+    margin: 0 auto;
+}
+
+.song-row {
+    display: flex;
+    align-items: center;
+    padding: 1.2rem 1.4rem;
+    border-radius: 1rem;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+    /* V3-6: will-change applied dynamically */
+    transform-origin: left center;
+}
+
+.song-row > * + * {
+    margin-left: 1.6rem;
+}
+
+/* v3.10 R6 (D50): solid focus fill, ink text, soft-ink meta. */
+.song-row.focused {
+    background: var(--focus-fill);
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: scale(1.02);
+}
+
+.song-row.focused .song-row-title,
+.song-row.focused .song-row-number,
+.song-row.focused .song-row-duration {
+    color: var(--focus-ink);
+}
+
+.song-row.focused .song-row-title {
+    font-weight: 600;
+}
+
+.song-row.focused .song-row-meta {
+    color: var(--focus-ink-soft);
+}
+
+/* v3.10 R5 (D83): playlist-detail cover thumbnail, a box like
+   .queue-row-thumb with a lazy <img>; dark until the cover loads. */
+.song-row-thumb {
+    width: 5.2rem;
+    height: 5.2rem;
+    border-radius: 0.6rem;
+    background: var(--bg-card);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.song-row-thumb > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.song-row-number {
+    width: 2.8rem;
+    text-align: right;
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.song-row-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.song-row-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.song-row-meta {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.2rem;
+}
+
+.song-row-duration {
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+/* v3.10 R1.7: the moving band of a virtual list (SonanceUtils.
+   createVirtualList). The mount keeps the list's class; the band takes the
+   mount's padding, so each row sits where it did when every row rendered. */
+.virtual-list-band {
+    padding: inherit;
+}
+
+/* v3.10 A1: Songs tab rows (mockup 16). docs/UI-MOCKUP-REFERENCE.md
+   "Library headers, chips and the Songs list". */
+.song-row-wide {
+    padding: 0.8rem 1.4rem;
+}
+
+.song-row-thumb-wide {
+    width: 4.8rem;
+    height: 4.8rem;
+}
+
+.song-row-wide .song-row-title {
+    flex: 2.2 1 0%;
+    min-width: 0;
+    font-size: 1.6rem;
+}
+
+.song-row-artist,
+.song-row-album {
+    flex: 1.4 1 0%;
+    min-width: 0;
+    font-size: 1.4rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.song-row-artist {
+    color: var(--text-secondary);
+}
+
+.song-row-album {
+    color: var(--text-muted);
+}
+
+.song-row.focused .song-row-artist,
+.song-row.focused .song-row-album {
+    color: var(--focus-ink-soft);
+}
+
+/* A row whose page has not arrived: the real row's boxes with their text as
+   bars, so the pitch is the same and focus can rest on it. */
+.song-row-pending .song-row-title,
+.song-row-pending .song-row-meta,
+.song-row-pending .song-row-artist,
+.song-row-pending .song-row-album {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 0.4rem;
+}
+
+.song-row-pending .song-row-info .song-row-title {
+    width: 55%;
+}
+
+.song-row-pending .song-row-info .song-row-meta {
+    width: 35%;
+}
+
+/* v3.10 A1/A2: the header above a Library list (mockups 16, 20). */
+.library-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 2.4rem 2.8rem 0;
+}
+
+/* Over a song list: the list's width, so the title lines up with the rows. */
+.library-header-list {
+    max-width: 120rem;
+    margin: 0 auto;
+}
+
+.library-header-text {
+    min-width: 0;
+}
+
+.library-header-title {
+    font-size: 3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.library-header-count {
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-top: 0.4rem;
+}
+
+.library-header-chips {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.library-header-chips > * + * {
+    margin-left: 1.2rem;
+}
+
+.library-chip {
+    display: flex;
+    align-items: center;
+    height: 4rem;
+    padding: 0 1.8rem;
+    border-radius: 2rem;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.library-chip > * + * {
+    margin-left: 0.8rem;
+}
+
+.library-chip-icon {
+    width: 1.6rem;
+    height: 1.6rem;
+    fill: currentColor;
+}
+
+/* Chips are buttons (R6): solid focus fill and ink. */
+.library-chip.focused {
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    outline: none !important;
+    transform: scale(1.04);
+}
+
+/* Unavailable (Sort under a genre filter): dimmed, still focusable (D55). */
+.library-chip.is-unavailable {
+    opacity: 0.4;
+}
+
+/* v3.10 A2: the Albums genre filter's picker, a panel over the right of the
+   Library screen. Its list is a virtual list (live has 693 genres). */
+.library-genre-picker {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 48rem;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    /* The panel surface, opaque: at 0.95 the grid's titles showed through
+       the rows. */
+    background: rgb(30, 30, 38);
+    border-radius: 2rem;
+    padding: 2.4rem 1.6rem;
+    box-shadow: 0 0.8rem 2.4rem rgba(0, 0, 0, 0.4);
+}
+
+.genre-picker-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    padding: 0 1.4rem 1.6rem;
+    flex-shrink: 0;
+}
+
+.genre-picker-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+}
+
+/* D76: right padding for the row's 2 % growth. */
+.genre-picker-list {
+    padding: 0.4rem 2.4rem 0.8rem 0;
+}
+
+.genre-pick-row {
+    display: flex;
+    align-items: center;
+    padding: 1.2rem 1.4rem;
+    border-radius: 1rem;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+    transform-origin: left center;
+}
+
+.genre-pick-row > * + * {
+    margin-left: 1.2rem;
+}
+
+.genre-pick-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.genre-pick-count {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.genre-pick-check {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+/* A row (R6): solid fill, ink, soft-ink meta. */
+.genre-pick-row.focused {
+    background: var(--focus-fill);
+    outline: none !important;
+    transform: scale(1.02);
+}
+
+.genre-pick-row.focused .genre-pick-name,
+.genre-pick-row.focused .genre-pick-check {
+    color: var(--focus-ink);
+}
+
+.genre-pick-row.focused .genre-pick-count {
+    color: var(--focus-ink-soft);
+}
+
+/* V3-5: Genre card — gradient background (Apple Music style). Gradient
+   is set inline per-card from GENRE_GRADIENTS in library.js; no left
+   border, no dark card, just a bold colour block. */
+.genre-card {
+    min-height: 9.6rem;
+    padding: 2rem 1.8rem;
+    border-radius: 1.2rem;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    /* V3-6: will-change applied dynamically */
+    transform-origin: center center;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: relative;
+    overflow: hidden;
+}
+
+.genre-card.focused {
+    outline: none !important;
+    transform: scale(1.12);
+    z-index: 5;
+    box-shadow: 0 0 0 0.4rem var(--focus-fill), 0 2.2rem 4.4rem rgba(0, 0, 0, 0.7);
+}
+
+.genre-card-name {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: white;
+}
+
+.genre-card-count {
+    font-size: 1.2rem;
+    color: rgba(255, 255, 255, 0.65);
+    margin-top: 0.2rem;
+}
+
+/* Library pagination loading indicator */
+.library-loading-more {
+    text-align: center;
+    padding: 1.6rem;
+    color: var(--text-muted);
+    font-size: 1.3rem;
+}
+
+/* Library empty state */
+.library-empty {
+    text-align: center;
+    padding: 6rem 2.4rem;
+}
+
+/* Genre Songs Header */
+.genre-songs-header {
+    margin-bottom: 2rem;
+}
+
+.genre-songs-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* ============================================
+   Album Detail Screen
+   ============================================ */
+.album-detail {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    /* v3.10 S3 (D82): the screen fills the page layer, so .album-detail-right
+       is a real scroller. This is #page-current's own child (album.js puts
+       `album-active` on an #content-area that no longer exists, and the
+       .page-content rule above matches nothing), so `flex: 1` did nothing:
+       the column took its content height, the tracklist never scrolled, and
+       rows past the page bottom were cut off and focused off screen. R5's
+       two-line rows made that happen at 150 % on a 10-track album. */
+    height: 100%;
+}
+
+.album-detail-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.album-detail-left {
+    width: 20rem;
+    flex-shrink: 0;
+    /* v3.10 D84 (D108): at 175-200 % the column is taller than the page, so
+       it scrolls (its zone reveals the focused button); below that it fits
+       and never moves. Positioned: the reveal measures inside it. */
+    overflow-x: hidden;
+    overflow-y: auto;
+    position: relative;
+    /* The scroll range ends past the last button, so its focus scale and
+       the reveal's margin fit (D76). */
+    padding-bottom: 2.4rem;
+}
+
+.album-detail-art {
+    margin-bottom: 2rem;
+}
+
+.album-detail-art .album-art {
+    box-shadow: 0 0.8rem 3.2rem rgba(0, 0, 0, 0.4);
+}
+
+.album-detail-title {
+    font-size: 2.6rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.6rem;
+    line-height: 1.2;
+    word-wrap: break-word;
+}
+
+.album-detail-artist {
+    font-size: 1.7rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 0.8rem;
+}
+
+.album-detail-meta {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.6rem;
+    padding-bottom: 1.6rem;
+}
+
+.album-play-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* V3-6-fix GFX-3: inset by 8px each side so the rounded ends don't
+       clip against the left-panel edge. */
+    width: calc(100% - 1.6rem);
+    margin-left: 0.8rem;
+    margin-right: 0.8rem;
+    box-sizing: border-box;
+    padding: 1rem 1.6rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 2.2rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    transition: transform 0.15s ease;
+    will-change: transform;
+    transform-origin: center center;
+}
+
+.album-play-btn > * + * {
+    margin-left: 0.8rem;
+}
+
+.album-play-btn.focused {
+    outline: none !important;
+    transform: scale(1.04);
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+.album-shuffle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* V3-6-fix GFX-3: inset by 8px each side. */
+    width: calc(100% - 1.6rem);
+    margin-left: 0.8rem;
+    margin-right: 0.8rem;
+    box-sizing: border-box;
+    padding: 1rem 1.6rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 2.2rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    will-change: transform;
+    transform-origin: center center;
+}
+
+.album-shuffle-btn > * + * {
+    margin-left: 0.8rem;
+}
+
+.album-shuffle-btn.focused {
+    outline: none !important;
+    transform: scale(1.04);
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+/* Tracklist — the ONLY scrollable area in album detail.
+   V3-4: padding-right gives focused rows (scale(1.02), transform-origin:
+   left center) room to grow rightward without being clipped by overflow-x:
+   hidden. */
+.album-detail-right {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-width: 0;
+    padding-bottom: 2rem;
+    padding-right: 4rem;
+    position: relative;
+    margin-left: 4.8rem;
+}
+
+.album-tracklist-label {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.1rem;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+}
+
+.album-tracklist-duration {
+    font-size: 1.3rem;
+    color: var(--text-muted);
+    margin-bottom: 1.6rem;
+}
+
+.track-row {
+    display: flex;
+    align-items: center;
+    padding: 1.2rem 1.4rem;
+    border-radius: 1rem;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+    /* V3-6: will-change applied dynamically */
+    transform-origin: left center;
+}
+
+.track-row > * + * {
+    margin-left: 1.6rem;
+}
+
+/* v3.10 R6 (D50): solid focus fill, ink text and icons, soft-ink artist. */
+.track-row.focused {
+    background: var(--focus-fill);
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: scale(1.02);
+}
+
+.track-row.focused .track-row-title,
+.track-row.focused .track-row-number,
+.track-row.focused .track-row-duration {
+    color: var(--focus-ink);
+}
+
+.track-row.focused .track-row-title {
+    font-weight: 600;
+}
+
+.track-row.focused .track-row-artist {
+    color: var(--focus-ink-soft);
+}
+
+/* The playing row's equaliser bars are accent: ink on the focus fill. */
+.track-row.focused .eq-bar {
+    background: var(--focus-ink);
+}
+
+.track-row-number {
+    width: 2.8rem;
+    text-align: right;
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.track-row-eq {
+    width: 2.8rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    height: 2rem;
+    flex-shrink: 0;
+}
+
+.track-row-eq > * + * {
+    margin-left: 0.2rem;
+}
+
+/* v3.10 R5 (D57): title with the track artist under it (mockup 07). */
+.track-row-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.track-row-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.track-row-artist {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.2rem;
+}
+
+.track-title-playing {
+    color: var(--accent);
+}
+
+.track-row-duration {
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.album-detail-error {
+    padding: 4.8rem 3.2rem;
+    text-align: center;
+}
+
+/* ============================================
+   Search Screen
+   ============================================ */
+.search-screen {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+}
+
+.search-screen > * + * {
+    margin-left: 4rem;
+}
+
+.search-left {
+    width: 35%;
+    min-width: 35rem;
+    max-width: 50rem;
+    flex-shrink: 0;
+    /* v3.10 D84 (D108): the keyboard is taller than the page at 200 %; the
+       panel scrolls to the focused key. A scroller clips both axes, so it
+       gets 1.2rem on the right for the last column's focus scale (D76):
+       content-box, so the keys keep their width, and a negative margin, so
+       the results column keeps its place. */
+    overflow-x: hidden;
+    overflow-y: auto;
+    position: relative;
+    box-sizing: content-box;
+    padding-right: 1.2rem;
+    margin-right: -1.2rem;
+    padding-bottom: 2.4rem;
+}
+
+.search-heading {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 1.8rem;
+}
+
+/* Search Input Bar */
+.search-input-bar {
+    display: flex;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 1.2rem;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 2rem;
+}
+
+.search-input-bar > * + * {
+    margin-left: 1.2rem;
+}
+
+.search-input-text {
+    font-size: 1.8rem;
+    color: var(--text-muted);
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-input-text.has-text {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.search-clear-btn {
+    width: 2.8rem;
+    height: 2.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 50%;
+    color: var(--text-secondary);
+    font-size: 1.8rem;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.search-clear-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+}
+
+/* On-Screen Keyboard */
+.search-keyboard {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    grid-gap: 0.8rem;
+}
+
+.kb-key {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+    border-radius: 0.8rem;
+    color: var(--text-secondary);
+    font-size: 1.8rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 1.4rem 0;
+    min-height: 4.8rem;
+    transition: transform 0.12s ease;
+    /* V3-6: will-change applied dynamically (35+ keyboard keys visible) */
+}
+
+.kb-key.focused {
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    outline: none !important;
+    transform: scale(1.08);
+    z-index: 5;
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+.kb-space {
+    grid-column: span 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+    border-radius: 0.8rem;
+    color: var(--text-secondary);
+    font-size: 1.4rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 1.4rem 0;
+    min-height: 4.8rem;
+    letter-spacing: 0.2rem;
+    transition: transform 0.12s ease;
+    will-change: transform;
+}
+
+.kb-space.focused {
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    outline: none !important;
+    transform: scale(1.06);
+    z-index: 5;
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+/* D76: the keyboard's first column scales from its left edge.
+   .search-screen is #page-current's own child and clips at its border, so
+   there is no room to its left without moving the layout. */
+.kb-key:nth-child(9n+1),
+.kb-space {
+    transform-origin: left center;
+}
+
+.kb-spacer {
+    grid-column: span 2;
+}
+
+.kb-del {
+    grid-column: span 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+    border-radius: 0.8rem;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 1.4rem 0;
+    min-height: 4.8rem;
+    transition: transform 0.12s ease;
+    will-change: transform;
+}
+
+.kb-del.focused {
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    outline: none !important;
+    transform: scale(1.06);
+    z-index: 5;
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+/* Search Right Panel */
+.search-right {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    /* D76: room for a focused quick-access tile, a wide card at scale 1.12
+       plus its ring (it overhangs ~3.5rem at 100 %). On the left the 4rem
+       gap to the keyboard is padding, not margin (below), so the content
+       stays where it was; the right padding grows from 3.2rem. The bottom
+       padding lets the last result row scroll clear of the edge. */
+    padding-right: 4rem;
+    padding-left: 4rem;
+    padding-bottom: 2rem;
+}
+
+.search-screen > .search-right {
+    margin-left: 0;
+}
+
+.search-section-label {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.1rem;
+    text-transform: uppercase;
+    margin-bottom: 1.6rem;
+}
+
+/* Quick Access Grid */
+.search-quickaccess-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-gap: 1.2rem;
+}
+
+/* V3-6-fix GFX-5: Quick Access tile — gradient block + label, mirrors the
+   Library → Genres tile style. Background gradient is set inline per-tile
+   from QA_ITEMS in search.js. */
+.search-qa-tile {
+    min-height: 9.6rem;
+    padding: 2rem 1.8rem;
+    border-radius: 1.2rem;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    /* V3-6: will-change applied dynamically */
+    transform-origin: center center;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: relative;
+    overflow: hidden;
+}
+
+.search-qa-tile.focused {
+    outline: none !important;
+    transform: scale(1.12);
+    z-index: 5;
+    box-shadow: 0 0 0 0.4rem var(--focus-fill), 0 2.2rem 4.4rem rgba(0, 0, 0, 0.7);
+}
+
+.search-qa-tile-name {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: white;
+}
+
+/* Search Results List */
+.search-result-item {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.2rem;
+    border-radius: 1rem;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+    /* V3-6: will-change applied dynamically */
+    transform-origin: left center;
+}
+
+.search-result-item > * + * {
+    margin-left: 1.4rem;
+}
+
+/* v3.10 R6 (D50): solid focus fill, ink text, soft-ink meta. */
+.search-result-item.focused {
+    background: var(--focus-fill);
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    transform: scale(1.02);
+}
+
+.search-result-item.focused .search-result-title,
+.search-result-item.focused .search-result-duration {
+    color: var(--focus-ink);
+}
+
+.search-result-item.focused .search-result-title {
+    font-weight: 600;
+}
+
+.search-result-item.focused .search-result-meta {
+    color: var(--focus-ink-soft);
+}
+
+.search-result-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.search-result-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-result-meta {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.2rem;
+}
+
+.search-result-duration {
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    margin-left: 1.2rem;
+}
+
+.search-no-results {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6rem 2.4rem;
+    color: var(--text-muted);
+    font-size: 1.4rem;
+    text-align: center;
+}
+
+.search-loading {
+    /* Skeleton result rows */
+}
+
+.skeleton-result-row {
+    height: 7.2rem;
+    margin-bottom: 0.8rem;
+    border-radius: 1rem;
+}
+
+/* ============================================
+   Playlists Screen (Full Implementation)
+   ============================================ */
+.playlists-screen {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 2rem;
+}
+
+/* v3.10 R1.7: the detail's virtual list measures its mount's offset inside
+   this scroller, so it must be the mount's offsetParent. */
+.playlist-detail-screen {
+    position: relative;
+}
+
+/* v3.10 A3: four columns of cover cards (was three gradient tiles). The
+   padding is the room for a focused card's 1.12 and its ring (D76): 3.2rem
+   above, because at 100-125 % the first row's ring rose 2.6-3.1 px past
+   2.4rem (focus-clip sweep). */
+.playlists-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-gap: 3.2rem 2.4rem;
+    justify-content: center;
+    max-width: 140rem;
+    margin: 0 auto;
+    padding: 3.2rem 2.8rem 2.4rem;
+    overflow: visible;
+}
+
+.playlists-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8rem 2.4rem;
+    text-align: center;
+}
+
+.playlists-empty-icon {
+    width: 5.6rem;
+    height: 5.6rem;
+    fill: var(--text-muted);
+    opacity: 0.4;
+    margin-bottom: 2rem;
+}
+
+.playlists-empty-text {
+    font-size: 1.6rem;
+    color: var(--text-muted);
+}
+
+/* Playlist detail song list */
+.playlist-detail-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 2.4rem;
+}
+
+.playlist-detail-header > * + * {
+    margin-left: 1.6rem;
+}
+
+.playlist-detail-info {
+    display: flex;
+    align-items: baseline;
+}
+
+.playlist-detail-info > * + * {
+    margin-left: 1.2rem;
+}
+
+.playlist-detail-name {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.playlist-detail-count {
+    font-size: 1.4rem;
+    color: var(--text-muted);
+}
+
+/* ============================================
+   Settings Screen (Enhanced)
+   ============================================ */
+.settings-playback-indicators {
+    display: flex;
+    margin-top: 0.4rem;
+}
+
+.settings-playback-indicators > * + * {
+    margin-left: 1.2rem;
+}
+
+.settings-indicator {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.6rem 1.2rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 0.8rem;
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+}
+
+.settings-indicator > * + * {
+    margin-left: 0.6rem;
+}
+
+.settings-indicator.active {
+    color: var(--accent);
+    border-color: rgba(var(--accent-rgb), 0.3);
+    background: var(--accent-soft);
+}
+
+.settings-indicator svg {
+    width: 1.4rem;
+    height: 1.4rem;
+    fill: currentColor;
+}
+
+.settings-volume-bar {
+    display: flex;
+    align-items: center;
+    margin-top: 0.4rem;
+}
+
+.settings-volume-bar > * + * {
+    margin-left: 1rem;
+}
+
+.settings-volume-track {
+    width: 12rem;
+    height: 0.4rem;
+    background: var(--border);
+    border-radius: 0.2rem;
+    overflow: hidden;
+}
+
+.settings-volume-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 0.2rem;
+}
+
+.settings-volume-label {
+    font-size: 1.3rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Logout confirmation overlay */
+.settings-confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(10, 10, 12, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.settings-confirm-dialog {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 1.6rem;
+    padding: 3.2rem;
+    max-width: 36rem;
+    text-align: center;
+}
+
+.settings-confirm-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.settings-confirm-message {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+    margin-bottom: 2.4rem;
+    line-height: 1.5;
+}
+
+.settings-confirm-buttons {
+    display: flex;
+    justify-content: center;
+}
+
+.settings-confirm-buttons > * + * {
+    margin-left: 1.2rem;
+}
+
+.settings-confirm-cancel {
+    padding: 1rem 2.4rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    color: var(--text-primary);
+    font-size: 1.4rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    will-change: transform;
+}
+
+.settings-confirm-cancel.focused {
+    outline: none !important;
+    transform: scale(1.04);
+    background: var(--focus-fill);
+    border-color: var(--focus-fill);
+    color: var(--focus-ink);
+}
+
+.settings-confirm-logout {
+    padding: 1rem 2.4rem;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 1rem;
+    color: #ef4444;
+    font-size: 1.4rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    will-change: transform;
+}
+
+.settings-confirm-logout.focused {
+    outline: none !important;
+    transform: scale(1.04);
+    background: var(--focus-fill);
+    border-color: var(--focus-fill);
+    color: var(--focus-ink);
+}
+
+/* ============================================
+   Toast Notifications (V3-5: pill shape, slide-up entrance)
+   ============================================ */
+.sonance-toast {
+    position: fixed;
+    bottom: 19.6rem; /* 76px NP bar + 28px hint bar + 92px spacing */
+    left: 50%;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    font-size: 1.4rem;
+    font-family: inherit;
+    padding: 1rem 2.2rem;
+    border-radius: 2.4rem;
+    z-index: 9000;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, 2rem);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    will-change: transform, opacity;
+}
+
+.sonance-toast.visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+/* ============================================
+   Colour Button Hint Bar
+   ============================================ */
+.colour-hint-bar {
+    height: 2.8rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.colour-hint-bar > * + * {
+    margin-left: 2.4rem;
+}
+
+.colour-hint-bar.visible {
+    opacity: 1;
+}
+
+.colour-hint-item {
+    display: flex;
+    align-items: center;
+}
+
+.colour-hint-item > * + * {
+    margin-left: 0.6rem;
+}
+
+.colour-hint-dot {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.colour-hint-dot.red { background: #ef4444; }
+.colour-hint-dot.green { background: #22c55e; }
+.colour-hint-dot.yellow { background: #eab308; }
+.colour-hint-dot.blue { background: #3b82f6; }
+
+.colour-hint-label {
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ============================================
+   Exit Dialogue (P5.2)
+   ============================================ */
+.exit-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.exit-card {
+    background: rgba(30, 30, 38, 0.95);
+    border: 1px solid var(--border);
+    border-radius: 1.6rem;
+    padding: 3.2rem;
+    max-width: 40rem;
+    width: 90%;
+    text-align: center;
+}
+
+.exit-card-title {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.8rem;
+}
+
+.exit-card-subtitle {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+    margin-bottom: 2.8rem;
+}
+
+.exit-card-buttons {
+    display: flex;
+    justify-content: center;
+}
+
+.exit-card-buttons > * + * {
+    margin-left: 1.2rem;
+}
+
+.exit-btn {
+    padding: 1rem 2.8rem;
+    border: none;
+    border-radius: 2.4rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
+    transition: transform 0.15s ease;
+    will-change: transform;
+}
+
+.exit-btn-cancel.focused,
+.exit-btn-exit.focused {
+    outline: none !important;
+    transform: scale(1.06);
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================
+   Track options sheet (v3.10 A5, mockup 17)
+   js/options-sheet.js. A scrim over the screen, a panel on the right; the
+   entrance is transform + opacity only, and nothing animates at rest.
+   ============================================ */
+.options-sheet {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9000;   /* over the nav (100) and the NP bar, under the exit dialog (9999) */
+    background: var(--scrim);
+    animation: options-sheet-fade 0.2s ease backwards;
+    /* Centred by flex, not translate(-50%): no transform at rest, so the
+       panel's text never sits on a half pixel. */
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 4.8rem;
+}
+
+.options-sheet-panel {
+    width: 42rem;
+    max-height: calc(100vh - 8rem);
+    display: flex;
+    flex-direction: column;
+    background: rgba(30, 30, 38, 0.95);
+    border-radius: 2.4rem;
+    padding: 2.4rem 2rem;
+    box-shadow: 0 0.8rem 2.4rem rgba(0, 0, 0, 0.4);
+    animation: options-sheet-in 0.2s cubic-bezier(.2, .8, .2, 1) backwards;
+}
+
+@keyframes options-sheet-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes options-sheet-in {
+    from { transform: translateX(4rem); opacity: 0; }
+    to { transform: none; opacity: 1; }
+}
+
+.options-sheet-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 1.2rem 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 1.2rem;
+}
+
+.options-sheet-header > * + * {
+    margin-left: 1.6rem;
+}
+
+.options-sheet-art {
+    flex-shrink: 0;
+    width: 8rem;
+    height: 8rem;
+    border-radius: 0.8rem;
+    overflow: hidden;
+    background: var(--bg-card);
+}
+
+.options-sheet-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.options-sheet-head-text {
+    min-width: 0;
+}
+
+.options-sheet-title {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.options-sheet-artist {
+    margin-top: 0.4rem;
+    font-size: 1.6rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Scrolls when the panel is full (200 %); the padding is the room for a
+   focused row's 1.02 (D76: a scroller clips both axes; the first row rose
+   0.6-0.9 px past a 0 top). */
+.options-sheet-body {
+    position: relative;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.4rem 1.2rem 0.4rem 0;
+}
+
+.options-sheet-item {
+    display: flex;
+    align-items: center;
+    padding: 1.2rem 1.6rem;
+    border-radius: 1.2rem;
+    transform-origin: left center;
+    transition: transform 0.12s ease;
+}
+
+.options-sheet-item > * + * {
+    margin-left: 1.6rem;
+}
+
+.options-sheet-icon {
+    flex-shrink: 0;
+    width: 2.2rem;
+    height: 2.2rem;
+    fill: var(--text-secondary);
+}
+
+.options-sheet-label {
+    font-size: 1.8rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* v3.10 R6: a sheet row focuses as a row: fill, ink, 1.02 from the left. */
+.options-sheet-item.focused {
+    background: var(--focus-fill);
+    outline: none !important;
+    transform: scale(1.02);
+}
+
+.options-sheet-item.focused .options-sheet-icon {
+    fill: var(--focus-ink);
+}
+
+.options-sheet-item.focused .options-sheet-label {
+    color: var(--focus-ink);
+}
+
+/* The row the sheet opened on keeps the focus fill under the scrim (mockup
+   17), so it is clear which song the sheet is for; no transform. */
+.is-options-origin {
+    background: var(--focus-fill);
+}
+
+/* The credits view (R7's rows): a narrower label column than Now Playing's. */
+.options-sheet .credit-label {
+    flex-basis: 15rem;
+}
+
+/* ============================================
+   Now Playing Bar — opacity-based show/hide (V3-3 fix 5)
+   ============================================ */
+#now-playing-bar {
+    transition: opacity 0.2s ease;
+    will-change: opacity;
+    opacity: 1;
+}
+
+/* ============================================
+   Now Playing Fullbleed (P5.8) — NP screen fills the whole page layer
+   ============================================ */
+#page-current.fullbleed,
+#page-container > .page-ghost.fullbleed {
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+#page-current.fullbleed > *,
+#page-container > .page-ghost.fullbleed > * {
+    max-width: none !important;
+    margin: 0 !important;
+    height: 100%;
+}
+
+/* Now Playing active: zero padding, no scroll, fill completely (P6.2, P6.10, P7.1) */
+#page-current.np-active,
+#page-container > .page-ghost.np-active {
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+#page-current.np-active > *,
+#page-container > .page-ghost.np-active > * {
+    max-width: none !important;
+    margin: 0 !important;
+    height: 100%;
+}
+
+/* ============================================
+   Now Playing Lyrics Panel (P14b)
+   GPU-accelerated: only transform + opacity transitions.
+   Layout-triggering properties (width/padding/font-size)
+   snap instantly — never transitioned.
+   ============================================ */
+.np-layout {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.np-left {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 48rem;
+    max-width: 100%;
+    flex-shrink: 0;
+    padding: 2rem;
+    box-sizing: border-box;
+    /* v3.10 A6: every .np-left transform is written translate(x, y), so the
+       move between the Up Next and the side-panel positions interpolates as
+       one function (was translateX). */
+    transform: translate(0, 0);
+    transition: transform 0.25s ease;
+    /* V3-6-fix4 PERF-4: will-change applied dynamically only during the
+       lyrics-panel open/close transition (see nowplaying.js). */
+}
+
+/* Slide .np-left from centred to the left column when lyrics open.
+   .np-layout is full-width. With .np-left at 480px centred,
+   shifting by 320px - 50vw positions it ~80px from the left edge.
+   v3.10 R7: the credits panel uses the same geometry. */
+.np-layout.lyrics-active .np-left,
+.np-layout.credits-active .np-left {
+    transform: translate(calc(32rem - 50vw), 0);
+}
+
+/* Album art + title/subtitle resize INSTANTLY (no transition on size).
+   The container sliding via translateX is what reads as motion. */
+.np-layout.lyrics-active .np-screen-art,
+.np-layout.lyrics-active .np-screen-art-inner,
+.np-layout.credits-active .np-screen-art,
+.np-layout.credits-active .np-screen-art-inner {
+    width: 22rem;
+    height: 22rem;
+}
+
+.np-layout.lyrics-active .np-screen-title,
+.np-layout.credits-active .np-screen-title {
+    font-size: 2.2rem;
+}
+
+.np-layout.lyrics-active .np-screen-subtitle,
+.np-layout.credits-active .np-screen-subtitle {
+    font-size: 1.5rem;
+}
+
+/* v3.10 A6: with the Up Next strip showing, the column sits in the band
+   between the top nav (8rem, #page-container's usual top) and the strip
+   (14.4rem + a 1.6rem gap = 16rem): centred in the screen, then moved up
+   (8 - 16) / 2 = -4rem; the controls lose their bottom margin and the art is
+   capped so the column (art + 27.2rem) fits the band. Below 69.2rem of
+   screen (175 % and 200 % on the TV) the art would fall under 18rem, so
+   `.upnext-tight` gives up the nav's room instead (the nav auto-hides on
+   Now Playing): the band starts at 0, the move is -8rem. Sizes snap; only
+   the column's transform animates. */
+.np-layout.upnext-on .np-left {
+    transform: translate(0, -4rem);
+}
+
+.np-layout.upnext-on.upnext-tight .np-left {
+    transform: translate(0, -8rem);
+}
+
+.np-layout.upnext-on .np-screen-controls {
+    margin-bottom: 0;
+}
+
+.np-layout.upnext-on .np-screen-art,
+.np-layout.upnext-on .np-screen-art-inner {
+    max-width: calc(100vh - 51.2rem);
+    max-height: calc(100vh - 51.2rem);
+}
+
+.np-layout.upnext-on.upnext-tight .np-screen-art,
+.np-layout.upnext-on.upnext-tight .np-screen-art-inner {
+    max-width: calc(100vh - 43.2rem);
+    max-height: calc(100vh - 43.2rem);
+}
+
+/* v3.10-fix2 F2 (D157): with Up Next hidden the sleep chip sits alone under
+   the controls, absolute at the bottom of the column: the 5.2rem the column
+   keeps below them (their 3.2rem margin and its 2rem padding) holds the
+   4rem chip with 1.2rem above it, so the column keeps its pre-S6 size and
+   place. Shown like the strip (with a track, no side panel), opacity only.
+   Below 60rem of screen (200 % on the TV) the 58.3rem column would put the
+   chip under the bottom edge: `.sleep-tight` moves the column up 3rem while
+   the chip shows (the cover's top goes under the top edge). */
+.np-sleep-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4rem;
+    display: flex;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.np-layout.sleep-on .np-sleep-row {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.np-layout.sleep-on.sleep-tight .np-left {
+    transform: translate(0, -3rem);
+}
+
+.np-lyrics-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 55%;
+    padding: 0 4rem 0 4.8rem;
+    box-sizing: border-box;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: transform 0.25s ease, opacity 0.2s ease;
+    /* V3-6-fix4 PERF-4: will-change applied dynamically. */
+    overflow: hidden;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.np-layout.lyrics-active .np-lyrics-panel {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.np-lyrics-scroll-wrapper {
+    position: relative;
+    width: 100%;
+    height: 72%;
+    overflow: hidden;
+    /* V3-6-fix4 PERF-5 evaluation: a pseudo-element gradient overlay was
+       tried in place of mask-image but produced visible dark bars over the
+       blurred album-art backdrop (mask fades content; gradient overlays
+       paint flat colour over everything). Keeping mask-image preserves
+       the original "fade-text-over-bg" effect. The other PERF-1..4/6 wins
+       are more than enough; mask-image stays. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+}
+
+.np-lyrics-lines {
+    /* V3-6-fix4 PERF-4: will-change applied dynamically while lyrics
+       panel is visible (see nowplaying.js). */
+    padding: 0;
+}
+
+/* All lines render at the same font-size. Active uses transform: scale()
+   instead of font-size change (font-size triggers layout every frame).
+   V3-6-fix5 FIX-3: font 18 → 36 px (visibly doubled). Long lines wrap
+   naturally inside the panel — do NOT add white-space: nowrap or
+   text-overflow: ellipsis here. */
+.lyrics-line {
+    padding: 1.4rem 0;
+    line-height: 1.4;
+    font-size: 3.6rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.5);
+    opacity: 0.5;
+    transform: scale(1);
+    transform-origin: left center;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    /* V3-6: too many lines on screen — let the scrolling parent handle GPU
+       layering via its single will-change. */
+}
+
+.lyrics-line.lyrics-active {
+    color: #ffffff;
+    font-weight: 700;
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+.lyrics-line.lyrics-upcoming {
+    color: rgba(255, 255, 255, 0.5);
+    opacity: 0.5;
+    transform: scale(1);
+}
+
+.lyrics-line.lyrics-past {
+    color: rgba(255, 255, 255, 0.25);
+    opacity: 0.25;
+    transform: scale(1);
+}
+
+/* D48: a lyric with no timestamps has no active line, so every line is read
+   at once — same weight as .lyrics-active minus the scale, rather than the
+   dimmed `upcoming` treatment that only makes sense next to a highlight. */
+.lyrics-line.lyrics-unsynced {
+    color: #ffffff;
+    opacity: 1;
+    transform: scale(1);
+}
+
+.np-lyrics-empty {
+    color: var(--text-muted);
+    font-size: 1.6rem;
+    font-style: italic;
+    text-align: center;
+    padding: 2.4rem 0;
+}
+
+/* Lyrics button in transport controls */
+.np-ctrl-lyrics {
+    color: var(--text-secondary);
+}
+
+.np-ctrl-lyrics.focused {
+    color: var(--focus-ink);
+}
+
+/* When the panel is open, indicate state with accent colour even unfocused */
+.np-ctrl-lyrics.is-active {
+    color: var(--accent);
+}
+
+/* D55 (v3.10 R3): with no lyrics the button is dimmed, not display:none. It
+   stays in the np-controls zone (a stable zone shape, V3.7-fix29), so focus
+   must never land on it invisibly; Enter on it is a no-op (nowplaying.js
+   _toggleLyrics). Focused it is brighter so its platter is still seen. */
+.np-ctrl-lyrics.is-unavailable {
+    opacity: 0.35;
+}
+
+.np-ctrl-lyrics.is-unavailable.focused {
+    opacity: 0.7;
+}
+
+/* v3.10 R7: ⓘ credits, the lyrics button's states (D55 with no track). */
+.np-ctrl-credits {
+    color: var(--text-secondary);
+}
+
+.np-ctrl-credits.focused {
+    color: var(--focus-ink);
+}
+
+.np-ctrl-credits.is-active {
+    color: var(--accent);
+}
+
+.np-ctrl-credits.is-unavailable {
+    opacity: 0.35;
+}
+
+.np-ctrl-credits.is-unavailable.focused {
+    opacity: 0.7;
+}
+
+/* v3.10-fix2 F7: Focus mode's button; on, it reads like an open panel's
+   (accent at rest). Never dimmed: it works with or without a track. */
+.np-ctrl-focus {
+    color: var(--text-secondary);
+}
+
+.np-ctrl-focus.focused {
+    color: var(--focus-ink);
+}
+
+.np-ctrl-focus.is-active {
+    color: var(--accent);
+}
+
+/* An open panel's button is accent at rest; focused, its platter is the
+   accent too, so the ink must win or the icon vanishes (lyrics had the same
+   rule order since S3; fixed with it, D-number in the S6 entry). Focus
+   mode's button follows the same rule (fix2 F7). */
+.np-ctrl-lyrics.is-active.focused,
+.np-ctrl-credits.is-active.focused,
+.np-ctrl-focus.is-active.focused {
+    color: var(--focus-ink);
+}
+
+/* v3.10-fix2 F7 (D159): Focus mode dims the whole Now Playing screen by
+   half: the screen's last layer, over the backdrop, the layout and Up Next
+   (z-index 3), under the top nav (fixed, 100, outside the page). Opacity
+   only, and nothing animates at rest. A sibling of .np-bg-image, which
+   gains nothing (D47). Off it is not rendered at all (.is-shown comes and
+   goes around the fades): present at opacity 0 it moved the translucent
+   nav's blend over the backdrop by up to 6/255 and could take a
+   composited layer of its own. */
+.np-focus-dim {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 4;
+    background: #000;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+}
+
+.np-focus-dim.is-shown {
+    display: block;
+}
+
+.np-focus-dim.is-on {
+    opacity: var(--np-focus-dim);
+}
+
+/* ============================================
+   Now Playing Credits Panel (v3.10 R7)
+   The lyrics panel's box and slide; transform + opacity only.
+   ============================================ */
+.np-credits-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 55%;
+    /* Top-aligned below the top nav's 8rem (mockup 10), unlike the centred
+       lyrics: a long credit list would otherwise centre its title under the
+       nav. The body takes what is left and scrolls. */
+    padding: 9rem 4rem 3.2rem 4.8rem;
+    box-sizing: border-box;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: transform 0.25s ease, opacity 0.2s ease;
+    overflow: hidden;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+}
+
+.np-layout.credits-active .np-credits-panel {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.np-credits-title,
+.np-credits-subtitle {
+    flex-shrink: 0;   /* only the body shrinks (and scrolls) */
+}
+
+.np-credits-title {
+    font-size: 3.6rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.np-credits-subtitle {
+    margin-top: 0.4rem;
+    font-size: 1.7rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Scrolls when the credits are taller than the panel. v3.10-fix2 F3: the
+   rows no longer take the focus (or its 1.02); the right padding keeps the
+   text clear of the scroll indicator on this box's right edge, the bottom
+   padding the last hairline clear of the bottom edge. */
+.np-credits-panel > .scroll-view {
+    margin-top: 2rem;
+}
+
+.np-credits-scroll {
+    position: relative;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 2.4rem;
+    padding-bottom: 1.2rem;
+}
+
+/* v3.10-fix2 F3 (D155): a scroller with its scroll indicator
+   (SonanceComponents.createScrollView), in both credits views. The wrapper
+   takes the scroller's place in its flex column and passes the shrink on. */
+.scroll-view {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-height: 0;
+}
+
+/* The scroller is the view's one focus stop. It does not scale, so
+   FocusManager's will-change hint (inline, for the focus scale) is
+   cancelled: as its own layer it would raster all of its text. */
+.scroll-view > .focused {
+    will-change: auto !important;
+}
+
+.scroll-indicator {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 0.4rem;
+    border-radius: 0.2rem;
+    background: var(--scroll-indicator-track);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+}
+
+.scroll-view > .focused + .scroll-indicator.is-scrollable {
+    opacity: 1;
+}
+
+.scroll-indicator-thumb {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    border-radius: 0.2rem;
+    background: var(--focus-fill);
+}
+
+.credits-section {
+    margin: 2.4rem 0 0.4rem;
+    font-size: 1.4rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3rem;
+    color: var(--accent);
+}
+
+.credits-section:first-child {
+    margin-top: 0;
+}
+
+.credit-row {
+    display: flex;
+    align-items: baseline;
+    padding: 1.1rem 1.2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.credit-label {
+    flex: 0 0 22rem;
+    font-size: 1.4rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15rem;
+    color: var(--text-secondary);
+}
+
+.credit-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 1.8rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+/* ============================================
+   Now Playing Up Next strip + sleep chip (v3.10 A6, A7)
+   ============================================ */
+.np-upnext {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 3;
+    padding: 0 5.6rem 2.4rem;
+    opacity: 0;
+    transform: translateY(2rem);
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.np-layout.upnext-on + .np-upnext {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.np-upnext-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 4rem;
+    margin-bottom: 1.2rem;
+}
+
+.np-upnext-label {
+    font-size: 1.4rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.2rem;
+    color: var(--text-secondary);
+}
+
+.np-upnext-row {
+    display: flex;
+    height: 6.8rem;
+}
+
+.np-upnext-row > * + * {
+    margin-left: 1.6rem;
+}
+
+/* A fifth of the row less the four gaps, however many tiles show. */
+.np-upnext-item {
+    flex: 0 0 calc((100% - 6.4rem) / 5);
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    padding: 0.8rem;
+    box-sizing: border-box;
+    border-radius: 1.2rem;
+    background: rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+    transform-origin: left center;
+    transition: transform 0.12s ease;
+}
+
+.np-upnext-thumb {
+    flex-shrink: 0;
+    width: 5.2rem;
+    height: 5.2rem;
+    border-radius: 0.6rem;
+    overflow: hidden;
+    background: var(--bg-card);
+}
+
+.np-upnext-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.np-upnext-text {
+    min-width: 0;
+    margin-left: 1.2rem;
+}
+
+.np-upnext-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.np-upnext-artist {
+    margin-top: 0.2rem;
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Up Next tiles are rows (R6): fill, ink, soft-ink artist, 1.02. */
+.np-upnext-item.focused {
+    background: var(--focus-fill);
+    outline: none !important;
+    transform: scale(1.02);
+}
+
+.np-upnext-item.focused .np-upnext-title {
+    color: var(--focus-ink);
+}
+
+.np-upnext-item.focused .np-upnext-artist {
+    color: var(--focus-ink-soft);
+}
+
+.np-upnext-empty {
+    display: flex;
+    align-items: center;
+    margin-left: 0;
+    font-size: 1.5rem;
+    color: var(--text-muted);
+}
+
+/* The sleep chip is a .library-chip (S5). Set, its moon is the accent at
+   rest; focused, the chip's ink wins. */
+.np-sleep-chip.is-active .library-chip-icon {
+    fill: var(--accent);
+}
+
+.np-sleep-chip.is-active.focused .library-chip-icon {
+    fill: var(--focus-ink);
+}
+
+/* ============================================
+   Now Playing Blur Background (P5.3)
+   ============================================ */
+.np-bg-image {
+    position: absolute;
+    /* V3-6-fix: 25% overscan on every side guarantees the blurred image
+       fully covers the viewport regardless of the source image's aspect
+       ratio, so no black bars appear with landscape-cropped covers. */
+    top: -25%;
+    left: -25%;
+    width: 150%;
+    height: 150%;
+    background-size: cover;
+    background-position: center;
+    /* V3-6-fix: 60px blur (was 30px) — softer, more abstract backdrop.
+
+       D47 / v3.9-fix1 R2: do NOT reintroduce V3.9 T3's cheaper form of this
+       (a 25% box with blur(10px), promoted with translateZ(0) and scaled 6x,
+       so the blur rasters at 1/6 scale). The geometry and the effective blur
+       radius are equivalent and modern Chromium renders the two identically to
+       within 1/255, but on Tizen 5.0 / Chromium 63 the backdrop disappeared
+       entirely — a filtered, transformed, composited layer's raster scale is
+       exactly the thing that engine (pre-Composite-After-Paint) gets to decide
+       for itself. The saving was a one-off 4.67 -> 0.13 Mpx raster on a screen
+       that opens once per session; this rule is what a shipped build has
+       proven on the device.
+
+       v3.10 R8 (ticket §6.5): twice the radius, 60 -> 120px, on this same
+       element, box, opacity and overlay. Still px at every interface size
+       (D63) and still no transform (D47); whether the Q90R draws it is a TV
+       checklist item. */
+    filter: blur(120px) saturate(1.3);
+    opacity: 0.6;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.np-bg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 10, 12, 0.55);
+    z-index: 1;
+    pointer-events: none;
+}
+
+
+/* ============================================
+   Stars (Favourites) — P13a
+   ============================================ */
+
+/* Album title + star row (left panel) */
+.album-detail-title-row {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 0.6rem;
+}
+
+.album-detail-title-row > * + * {
+    margin-left: 1rem;
+}
+
+.album-detail-title-row .album-detail-title {
+    flex: 1;
+    margin-bottom: 0;
+    min-width: 0;
+}
+
+.album-star-btn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 0.4rem;
+    margin-top: 0.2rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.album-star-btn svg {
+    display: block;
+}
+
+.album-star-btn.is-starred {
+    color: #ffffff;
+}
+
+/* v3.10 R6: a circular focus-fill platter, as the NP transport buttons */
+.album-star-btn.focused {
+    outline: none !important;
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    transform: none;
+    box-shadow: none;
+}
+
+/* Per-track star indicator (non-focusable, right before duration) */
+.track-row-star {
+    width: 1.8rem;
+    height: 1.8rem;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.track-row-star svg {
+    display: block;
+    width: 1.4rem;
+    height: 1.4rem;
+}
+
+/* Show the star if the track is starred, OR if its row is focused */
+.track-row-star.is-starred {
+    opacity: 1;
+    color: #ffffff;
+}
+
+.track-row.focused .track-row-star {
+    opacity: 1;
+    color: var(--focus-ink);
+}
+
+/* Starred on a focused row was accent: it would vanish on the focus fill. */
+.track-row.focused .track-row-star.is-starred {
+    color: var(--focus-ink);
+}
+
+/* Now Playing transport star */
+.np-ctrl-star {
+    color: var(--text-secondary);
+}
+
+.np-ctrl-star.is-starred {
+    color: #ffffff;
+}
+
+.np-ctrl-star.is-starred svg {
+    fill: currentColor;
+}
+
+.np-ctrl-star.focused {
+    color: var(--focus-ink);
+}
+
+
+/* ============================================
+   Artist Detail Screen — P13b
+   ============================================ */
+.artist-detail {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    /* v3.10 S3 (D82): as .album-detail, so the discography scrolls. */
+    height: 100%;
+}
+
+.artist-detail-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.artist-detail-left {
+    width: 22rem;
+    flex-shrink: 0;
+    /* v3.10 D84 (D108): scrolls at 175-200 %, as .album-detail-left. */
+    overflow-x: hidden;
+    overflow-y: auto;
+    position: relative;
+    padding-bottom: 2.4rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+
+.artist-detail-photo {
+    width: 20rem;
+    height: 20rem;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    margin-bottom: 1.6rem;
+    box-shadow: 0 0.8rem 3.2rem rgba(0, 0, 0, 0.4);
+    background: var(--bg-card);
+}
+
+.artist-detail-photo > * {
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 50% !important;
+}
+
+.artist-detail-name {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+    max-height: 5.6rem;
+    overflow: hidden;
+    word-wrap: break-word;
+    width: 100%;
+}
+
+.artist-detail-count {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+    margin-top: 0.4rem;
+    margin-bottom: 2.4rem;
+    width: 100%;
+}
+
+.artist-play-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    /* V3-6-fix GFX-3: inset by 8px each side so the pill's rounded ends
+       sit comfortably inside the left panel. */
+    width: calc(100% - 1.6rem);
+    margin-left: 0.8rem;
+    margin-right: 0.8rem;
+    box-sizing: border-box;
+    padding: 1rem 1.6rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 2.2rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    transition: transform 0.15s ease;
+    will-change: transform;
+    transform-origin: center center;
+}
+
+.artist-play-btn > * + * {
+    margin-left: 0.8rem;
+}
+
+.artist-play-btn.focused {
+    outline: none !important;
+    transform: scale(1.04);
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+.artist-play-btn:disabled,
+.artist-shuffle-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.artist-shuffle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    /* V3-6-fix GFX-3: inset by 8px each side. */
+    width: calc(100% - 1.6rem);
+    margin-left: 0.8rem;
+    margin-right: 0.8rem;
+    box-sizing: border-box;
+    padding: 1rem 1.6rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: none;
+    border-radius: 2.2rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+    will-change: transform;
+    transform-origin: center center;
+}
+
+.artist-shuffle-btn > * + * {
+    margin-left: 0.8rem;
+}
+
+.artist-shuffle-btn.focused {
+    outline: none !important;
+    transform: scale(1.04);
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+/* Right panel — scrollable. D76: padding-right gives a focused row
+   (scale(1.02), left origin) room to grow, as .album-detail-right has; it
+   was cut by up to 41px. */
+.artist-detail-right {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-width: 0;
+    padding-bottom: 2.4rem;
+    padding-right: 4rem;
+    margin-left: 4.8rem;
+}
+
+.artist-section + .artist-section {
+    margin-top: 3.2rem;
+}
+
+.artist-section-label {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.1rem;
+    text-transform: uppercase;
+    margin-bottom: 1.6rem;
+}
+
+.artist-section-bio .artist-section-label,
+.artist-section-similar .artist-section-label {
+    margin-bottom: 1.2rem;
+}
+
+.artist-section-empty {
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    padding: 1.2rem 0;
+}
+
+/* Discography rows */
+.artist-albums-list {
+    display: block;
+}
+
+.artist-album-row {
+    display: flex;
+    align-items: center;
+    padding: 0.8rem;
+    border-radius: 1rem;
+    cursor: pointer;
+    margin-bottom: 1.2rem;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: transform 0.12s ease;
+    /* V3-6: will-change applied dynamically */
+    transform-origin: left center;
+}
+
+/* v3.10 R6 (D50): the row focus, at the rows' 1.02 (it was 1.03). */
+.artist-album-row.focused {
+    background: var(--focus-fill);
+    border-color: transparent !important;
+    outline: none !important;
+    box-shadow: none !important;
+    transform: scale(1.02);
+}
+
+.artist-album-row.focused .artist-album-art {
+    box-shadow: 0 0.4rem 1.6rem rgba(0, 0, 0, 0.3);
+}
+
+.artist-album-row.focused .artist-album-title {
+    color: var(--focus-ink);
+}
+
+.artist-album-row.focused .artist-album-meta {
+    color: var(--focus-ink-soft);
+}
+
+.artist-album-art {
+    flex-shrink: 0;
+}
+
+.artist-album-info {
+    flex: 1;
+    min-width: 0;
+    margin-left: 1.6rem;
+}
+
+.artist-album-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.4rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.artist-album-meta {
+    font-size: 1.3rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Biography */
+.artist-bio-text {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 72rem;
+}
+
+/* Similar Artists row */
+.artist-similar-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.artist-similar-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 9.6rem;
+    margin-right: 2rem;
+    margin-bottom: 1.6rem;
+    padding: 0.6rem;
+    border-radius: 1rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: transparent;
+    transition: transform 0.15s ease;
+    /* V3-6: will-change applied dynamically */
+    transform-origin: center center;
+}
+
+/* v3.10 R6 (D73): a card, so the card focus (scale, ring on the avatar);
+   it was a 55 % accent fill. */
+.artist-similar-card.focused {
+    border-color: transparent !important;
+    outline: none !important;
+    box-shadow: none !important;
+    transform: scale(1.12);
+    z-index: 5;
+}
+
+.artist-similar-card.focused .artist-similar-avatar {
+    box-shadow: 0 0 0 0.4rem var(--focus-fill), 0 2.2rem 4.4rem rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+}
+
+.artist-similar-card.focused .artist-similar-name {
+    color: #fff;
+    font-weight: 700;
+}
+
+.artist-similar-avatar {
+    width: 8rem;
+    height: 8rem;
+    margin-bottom: 0.8rem;
+}
+
+.artist-similar-name {
+    font-size: 1.3rem;
+    font-weight: 500;
+    color: rgba(240, 240, 245, 0.72);
+    text-align: center;
+    width: 100%;
+    max-height: 3.6rem;
+    overflow: hidden;
+    line-height: 1.3;
+}
+
+/* Clickable artist name in album detail left panel */
+.album-detail-artist.focusable {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    margin-left: -0.6rem;
+    background: transparent;
+    border: none;
+    font: inherit;
+    color: var(--accent);
+    border-radius: 0.6rem;
+    cursor: pointer;
+    /* No background/colour transition: they snap (v3.10 R6, D75). */
+}
+
+.album-detail-artist.focusable.focused {
+    background: var(--focus-fill);
+    color: var(--focus-ink);
+    outline: none;
+    transform: none;
+}
+
+/* Error state for artist detail */
+.artist-detail-error {
+    padding: 4rem 0;
+}
+
+/* --- Performance overlay (v3.10 R1.1, js/perf-hud.js) ---
+   A diagnostic readout, not part of the visual design: fixed top-left above
+   everything (the exit overlay is 9999), click-through, text only. Surface
+   and type reuse existing values: .exit-card's rgba(30,30,38,0.95) panel,
+   --text-primary, the 14px meta size and 8px radius. Nothing animates. */
+.perf-hud {
+    position: fixed;
+    top: 0.8rem;
+    left: 0.8rem;
+    z-index: 10000;
+    pointer-events: none;
+    padding: 0.8rem 1.2rem;
+    border-radius: 0.8rem;
+    background: rgba(30, 30, 38, 0.95);
+    color: var(--text-primary);
+    font-size: 1.4rem;
+    font-weight: 600;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+    white-space: pre;
+}
+
+/* v3.10 R1.8 (D58): Settings → Advanced → "Smooth scrolling
+   (experimental)", default Off (SonanceUtils.setSmoothScroll). Every
+   scroller animates the focus-follow's scrollTop writes. A ghost does not:
+   the scroll offset it copies must hold at the first frame (D98). */
+html.smooth-scroll * {
+    scroll-behavior: smooth;
+}
+
+html.smooth-scroll .page-ghost,
+html.smooth-scroll .page-ghost * {
+    scroll-behavior: auto;
+}
