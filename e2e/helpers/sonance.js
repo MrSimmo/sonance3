@@ -339,6 +339,9 @@ async function navTo(page, screen) {
 function _pngInPage(page, fn, args) {
     return page.evaluate(async function(a) {
         async function decode(b64) {
+            if (typeof b64 !== 'string' || !/^[A-Za-z0-9+/]+=*$/.test(b64)) {
+                throw new Error('decode: invalid base64 PNG payload');
+            }
             var blob = await (await fetch('data:image/png;base64,' + b64)).blob();
             var bmp = await createImageBitmap(blob);
             var c = document.createElement('canvas');
