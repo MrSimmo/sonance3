@@ -1,4 +1,4 @@
-# Sonance3
+# Sonance
 
 **A music player for Samsung Tizen TVs, built to stream from your self-hosted Navidrome or Subsonic-compatible server.**
 
