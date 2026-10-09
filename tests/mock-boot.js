@@ -173,9 +173,14 @@
         });
     }
 
+    // v3.12 R1: every fifth song (song-4, song-9, ...) is an Ogg Opus file,
+    // reported as Navidrome reports one (suffix opus, contentType
+    // audio/ogg), so the player asks for it transcoded (format=mp3), which
+    // tests/dev-server.js answers as a transcoding server does.
     var mockSongs = [];
     for (var i = 0; i < N_SONGS; i++) {
         var alb = mockAlbums.length ? mockAlbums[i % mockAlbums.length] : null;
+        var opus = i % 5 === 4;
         mockSongs.push({
             id: 'song-' + i,
             title: 'Track ' + _pad(i + 1, SONG_W),
@@ -189,8 +194,8 @@
             track: (i % 10) + 1,
             year: alb ? alb.year : 2020,
             genre: mockGenres[i % mockGenres.length].value,
-            suffix: 'wav',
-            contentType: 'audio/wav',
+            suffix: opus ? 'opus' : 'wav',
+            contentType: opus ? 'audio/ogg' : 'audio/wav',
             musicFolderId: alb ? alb.musicFolderId : LIB_IDS[0]
         });
     }

@@ -14,7 +14,9 @@
 //                             Navidrome. This is what makes the v3.9 T2
 //                             `fromDiskCache` measurement possible.
 //   /rest/stream.view       → a real WAV with Range support, so the browser's
-//                             HTML5 fallback player actually progresses.
+//                             HTML5 fallback player actually progresses; with
+//                             format=mp3 (v3.12 R1), a transcode: MP3, chunked,
+//                             no byte ranges, timeOffset honoured.
 //
 // Static assets are sent `no-store` so an edit is always picked up between
 // runs; only the synthetic media is cacheable.
@@ -196,6 +198,55 @@ var _wav = (function() {
 })();
 
 // ---------------------------------------------------------------------------
+// MP3 synthesis (v3.12 R1: the transcoded stream)
+// ---------------------------------------------------------------------------
+
+// Silent MPEG-1 Layer III frames: a 4-byte header (32 kbit/s, 44.1 kHz,
+// mono, no CRC: FF FB 10 C0) and 100 zero bytes (17 of side information
+// with no main data, so every granule decodes to silence). 144 * 32000 /
+// 44100 = 104 bytes a frame, 1152 samples = 26.1 ms. Any MP3 decoder plays
+// it; no encoder is needed.
+var MP3_FRAME_BYTES = 104;
+var MP3_FRAME_SECONDS = 1152 / 44100;
+var TRANSCODE_SECONDS = 20;
+
+var _mp3 = (function() {
+    var frames = Math.ceil(TRANSCODE_SECONDS / MP3_FRAME_SECONDS);
+    var buf = Buffer.alloc(frames * MP3_FRAME_BYTES);
+    for (var f = 0; f < frames; f++) {
+        buf.writeUInt32BE(0xFFFB10C0, f * MP3_FRAME_BYTES);
+    }
+    return buf;
+})();
+
+// What Navidrome does for `stream.view?format=mp3[&maxBitRate][&timeOffset]`:
+// ffmpeg's output streamed as it is made, so no Content-Length, no byte
+// ranges (a Range header is ignored: 200, the whole stream) and nothing
+// cacheable; `timeOffset` (whole seconds) starts the output that far into
+// the track. The synthetic track is silence, so the offset changes nothing
+// audible here: every answer is TRANSCODE_SECONDS long, as from a track long
+// enough to have that much left, and the offset is echoed in a header for
+// anyone reading the response.
+function sendTranscoded(req, res, format, timeOffset) {
+    if (format !== 'mp3') {
+        res.writeHead(400, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+        res.end('dev-server transcodes to mp3 only, not ' + format);
+        return;
+    }
+    res.writeHead(200, {
+        'Content-Type': 'audio/mpeg',
+        'Cache-Control': 'no-store',
+        'Accept-Ranges': 'none',
+        'X-Mock-Transcode': format + '; timeOffset=' + (parseInt(timeOffset, 10) || 0)
+    });
+    if (req.method === 'HEAD') { res.end(); return; }
+    // Written in pieces, as a live transcode is.
+    var CHUNK = MP3_FRAME_BYTES * 96;
+    for (var at = 0; at < _mp3.length; at += CHUNK) res.write(_mp3.slice(at, at + CHUNK));
+    res.end();
+}
+
+// ---------------------------------------------------------------------------
 // Request handling
 // ---------------------------------------------------------------------------
 
@@ -291,6 +342,11 @@ var server = http.createServer(function(req, res) {
             return;
         }
         if (/stream/.test(pathname)) {
+            // v3.12 R1: `format` other than `raw` asks for a transcode.
+            if (parsed.query.format && parsed.query.format !== 'raw') {
+                sendTranscoded(req, res, String(parsed.query.format), parsed.query.timeOffset);
+                return;
+            }
             sendMedia(req, res, _wav, 'audio/wav', '"stream-' + (parsed.query.id || '0') + '"');
             return;
         }

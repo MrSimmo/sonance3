@@ -83,6 +83,7 @@ Sonance is a music player app for Samsung Tizen TVs (specifically Q90R / Tizen 5
 - Seek: `seekTo(ms)`.
 - **Browser fallback:** AVPlay is only available on Tizen. For browser dev/testing, fall back to HTML5 `<audio>` element. The Player engine must abstract this: detect `window.webapis` at startup and use AVPlay if available, `<audio>` otherwise.
 - `config.xml` must include privilege: `http://tizen.org/privilege/tv.audio`.
+- **Transcoded formats (v3.12, D173).** Opus (`suffix` opus or a `contentType` naming opus) streams through the server as `format=mp3&maxBitRate=320`; every other URL is unchanged. All stream URLs come from `Player._streamUrlFor`. A transcode has no byte ranges: a seek reloads it with `timeOffset` (whole seconds), the engine's position is offset by it, and its duration is the track's metadata (D174–D176). Never `avplay.seekTo` a transcode.
 
 ### Network & Security
 - **The app MUST only connect to the user-configured Navidrome server.** No CDNs, no external fonts, no analytics, no third-party APIs, no external image sources.

@@ -508,8 +508,18 @@ var SubsonicAPI = (function() {
         });
     };
 
-    SubsonicAPI.prototype.getStreamUrl = function(songId) {
-        return this._buildUrl('stream.view', { id: songId });
+    // v3.12 R1 (D173): `opts` asks for a server transcode, { format,
+    // maxBitRate, timeOffset (whole seconds) }, each appended after `id` in
+    // that order when set. Without it the URL is 3.11's, byte for byte.
+    // js/player.js `_streamUrlFor` decides which tracks pass it.
+    SubsonicAPI.prototype.getStreamUrl = function(songId, opts) {
+        var params = { id: songId };
+        if (opts) {
+            if (opts.format) params.format = opts.format;
+            if (opts.maxBitRate) params.maxBitRate = opts.maxBitRate;
+            if (opts.timeOffset) params.timeOffset = opts.timeOffset;
+        }
+        return this._buildUrl('stream.view', params);
     };
 
     SubsonicAPI.prototype.getCoverArtUrl = function(id, size) {

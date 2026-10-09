@@ -127,6 +127,26 @@ var Player = (function() {
     // The position the next load of `trackId` seeks to before it plays.
     var _pendingSeek = null;     // { trackId, sec }
 
+    // v3.12 R1 (D173): formats AVPlay cannot play from their file, streamed
+    // through a server transcode instead. Samsung's 2019 TV specification
+    // lists Opus only inside video containers, and a .opus file is Ogg Opus.
+    // One list, matched on the suffix or the contentType.
+    var TRANSCODE_TYPES = ['opus'];
+    var TRANSCODE = { format: 'mp3', maxBitRate: 320 };
+    // The stream loaded now. A transcode has no byte ranges, so it is seeked
+    // by reloading it from an offset (Navidrome's timeOffset, whole seconds);
+    // the engine counts from 0, so `offset` is added to every position it
+    // reports.
+    var _stream = { transcoded: false, offset: 0 };
+    // v3.12 R1 (D175): a seek in a transcode. Its target (seconds) waits here
+    // while presses keep coming; playing, the reload goes out once they stop
+    // (each reload is a new transcode on the server); paused, at Play.
+    var _seekTarget = null;
+    var _seekTimer = null;
+    var SEEK_RELOAD_DELAY_MS = 400;
+    // The load in flight is a seek's reload of the current track (D176).
+    var _loadIsSeekReload = false;
+
     // v3.10 A7: the sleep timer's "End of track". When the current track
     // ends, playback pauses instead of advancing, the next track is cued
     // (paused) and 'trackendstop' is emitted. One-shot.
@@ -148,6 +168,75 @@ var Player = (function() {
         if (force || (now - _lastProgressEmit) >= PROGRESS_INTERVAL_MS) {
             _lastProgressEmit = now;
             _emit('progress', { currentTime: state.currentTime, duration: state.duration });
+        }
+    }
+
+    // =========================================
+    //  Stream URLs and transcodes (v3.12 R1)
+    // =========================================
+
+    function _isTranscoded(track) {
+        if (!track) return false;
+        var suffix = String(track.suffix || '').toLowerCase();
+        var type = String(track.contentType || '').toLowerCase();
+        for (var i = 0; i < TRANSCODE_TYPES.length; i++) {
+            if (suffix === TRANSCODE_TYPES[i] || type.indexOf(TRANSCODE_TYPES[i]) > -1) return true;
+        }
+        return false;
+    }
+
+    // The one place a track's stream URL is decided: the load path, both
+    // prepare-next paths and the seek reload. `offsetSec` applies to a
+    // transcode only.
+    function _streamUrlFor(api, track, offsetSec) {
+        if (!_isTranscoded(track)) return api.getStreamUrl(track.id);
+        return api.getStreamUrl(track.id, {
+            format: TRANSCODE.format,
+            maxBitRate: TRANSCODE.maxBitRate,
+            timeOffset: offsetSec > 0 ? Math.floor(offsetSec) : 0
+        });
+    }
+
+    // A duration the engine reports, as the player keeps it. A transcode's
+    // own length is only what is left after its offset, and while it is
+    // being made it may be unknown (Infinity, 0), so the track's metadata
+    // wins (D174). Anything else is kept as 3.11 kept it.
+    function _engineDuration(sec) {
+        if (_stream.transcoded) {
+            var meta = state.currentTrack ? (state.currentTrack.duration || 0) : 0;
+            if (meta > 0) return meta;
+            return (isFinite(sec) && sec > 0) ? sec + _stream.offset : 0;
+        }
+        return sec || 0;
+    }
+
+    function _cancelSeekReload() {
+        if (_seekTimer !== null) clearTimeout(_seekTimer);
+        _seekTimer = null;
+        _seekTarget = null;
+    }
+
+    // Reload the current transcode from the seek's target. It is the same
+    // track, so no trackchange, the scrobble state and any A8 cue are left
+    // alone, and a failure does not count toward the cap (D176).
+    function _seekReload() {
+        if (_seekTimer !== null) clearTimeout(_seekTimer);
+        _seekTimer = null;
+        var target = _seekTarget;
+        _seekTarget = null;
+        var track = state.currentTrack;
+        var api = (typeof AuthManager !== 'undefined') ? AuthManager.getApi() : null;
+        if (target === null || !track || !api) return;
+        var offset = Math.floor(target);
+        _stream = { transcoded: true, offset: offset };
+        state.currentTime = offset;
+        _loadIsSeekReload = true;
+        log('Player', 'Reloading the transcode at ' + offset + ' s');
+        var url = _streamUrlFor(api, track, offset);
+        if (IS_TIZEN) {
+            _avplayLoadAndPlay(url);
+        } else {
+            _html5LoadAndPlay(url);
         }
     }
 
@@ -192,8 +281,11 @@ var Player = (function() {
         if (!el) return;
 
         el._onTimeUpdate = function() {
-            state.currentTime = el.currentTime;
-            state.duration = el.duration || 0;
+            // v3.12 R1: while a seek's reload waits, the old stream's
+            // position must not show, nor drive prepare-next.
+            if (_seekTarget !== null) return;
+            state.currentTime = el.currentTime + _stream.offset;
+            state.duration = _engineDuration(el.duration);
 
             // Pre-load next track 5 seconds before end of current — runs BEFORE
             // the progress throttle so the boundary frame is never skipped.
@@ -207,7 +299,7 @@ var Player = (function() {
                     if (api) {
                         _nextPreparedTrack = nextInfo.track;
                         _nextPreparedIndex = nextInfo.index;
-                        _nextPreparedUrl = api.getStreamUrl(nextInfo.track.id);
+                        _nextPreparedUrl = _streamUrlFor(api, nextInfo.track, 0);
                         try {
                             _preloadAudio.src = _nextPreparedUrl;
                             _preloadAudio.volume = state.volume;
@@ -227,7 +319,7 @@ var Player = (function() {
         };
 
         el._onLoadedMetadata = function() {
-            state.duration = el.duration || 0;
+            state.duration = _engineDuration(el.duration);
             // v3.10 A8: a resumed track starts where it was saved.
             if (_pendingSeek && state.currentTrack && _pendingSeek.trackId === state.currentTrack.id) {
                 var at = Math.min(_pendingSeek.sec, state.duration || _pendingSeek.sec);
@@ -325,6 +417,9 @@ var Player = (function() {
         _nextPreparedTrack = null;
         _nextPreparedIndex = -1;
         _preloadReady = false;
+        _cancelSeekReload();
+        _loadIsSeekReload = false;
+        _stream = { transcoded: _isTranscoded(track), offset: 0 };
 
         // Reset old active (now preload slot) so it stops and releases its src
         try {
@@ -337,7 +432,8 @@ var Player = (function() {
         state.queueIndex = idx;
         state.currentTrack = track;
         state.currentTime = 0;
-        state.duration = _audio.duration || (track.duration || 0);
+        state.duration = _stream.transcoded ? _engineDuration(_audio.duration)
+            : (_audio.duration || (track.duration || 0));
         _scrobbled = false;
         _scrobbleTrackId = track.id;
 
@@ -449,7 +545,10 @@ var Player = (function() {
             avplay.setListener({
                 oncurrentplaytime: function(ms) {
                     if (gen !== _loadGeneration) return;
-                    state.currentTime = ms / 1000;
+                    // v3.12 R1: while a seek's reload waits, the old
+                    // stream's position must not show, nor drive prepare-next.
+                    if (_seekTarget !== null) return;
+                    state.currentTime = ms / 1000 + _stream.offset;
 
                     // Pre-prepare next track 5 seconds before end — runs BEFORE
                     // the progress throttle so the boundary frame is never skipped.
@@ -460,7 +559,7 @@ var Player = (function() {
                         if (nextInfo) {
                             var api = (typeof AuthManager !== 'undefined') ? AuthManager.getApi() : null;
                             if (api) {
-                                _nextPreparedUrl = api.getStreamUrl(nextInfo.track.id);
+                                _nextPreparedUrl = _streamUrlFor(api, nextInfo.track, 0);
                                 _nextPreparedTrack = nextInfo.track;
                                 _nextPreparedIndex = nextInfo.index;
                                 log('Player', 'Pre-prepared next: ' + (nextInfo.track.title || '?'));
@@ -525,7 +624,7 @@ var Player = (function() {
                         return;
                     }
                     try {
-                        state.duration = avplay.getDuration() / 1000;
+                        state.duration = _engineDuration(avplay.getDuration() / 1000);
                     } catch (e) {
                         state.duration = state.currentTrack ? (state.currentTrack.duration || 0) : 0;
                     }
@@ -575,6 +674,15 @@ var Player = (function() {
             return;
         }
 
+        // v3.12 R1: a resumed transcode (A8) starts at its position through
+        // its URL (timeOffset), not by a seek once loaded: it has no ranges.
+        var transcoded = _isTranscoded(track);
+        var offset = 0;
+        if (transcoded && !precomputedUrl && _pendingSeek && _pendingSeek.trackId === track.id) {
+            offset = Math.floor(_pendingSeek.sec);
+            _pendingSeek = null;
+        }
+
         var streamUrl = precomputedUrl;
         if (!streamUrl) {
             var api = (typeof AuthManager !== 'undefined') ? AuthManager.getApi() : null;
@@ -582,7 +690,7 @@ var Player = (function() {
                 error('Player', 'No API instance available');
                 return;
             }
-            streamUrl = api.getStreamUrl(track.id);
+            streamUrl = _streamUrlFor(api, track, offset);
         }
 
         log('Player', 'Loading: ' + (track.title || 'Unknown') + ' by ' + (track.artist || 'Unknown'));
@@ -592,6 +700,10 @@ var Player = (function() {
         // metadata arrived must not start the next one part-way through).
         _cuedAtSec = null;
         if (_pendingSeek && _pendingSeek.trackId !== track.id) _pendingSeek = null;
+        // v3.12 R1: and a seek waiting to reload the previous stream.
+        _cancelSeekReload();
+        _loadIsSeekReload = false;
+        _stream = { transcoded: transcoded, offset: offset };
 
         // Reset scrobble state
         _scrobbled = false;
@@ -656,7 +768,10 @@ var Player = (function() {
     // and its cause in a toast; the stop toast after the cap comes after it,
     // so it is the one left on screen.
     function _onLoadFailure(label, cause) {
-        _consecutiveLoadFailures++;
+        // v3.12 R1 (D176): a seek's reload of a track that was playing is
+        // not another track failing in a row.
+        if (!_loadIsSeekReload) _consecutiveLoadFailures++;
+        _loadIsSeekReload = false;
         var failed = state.currentTrack;
         if (failed && typeof App !== 'undefined' && App.showToast) {
             App.showToast((failed.title || 'Unknown track') + ' — ' +
@@ -694,6 +809,7 @@ var Player = (function() {
         log('Player', 'Stopped at the end of the track (sleep timer)');
         _stopAtTrackEnd = false;
         _resetPreparedTrack();
+        _cancelSeekReload();
         var nextInfo = _determineNextTrack();
         state.isPlaying = false;
         _suppressScreenSaver(false);
@@ -851,6 +967,12 @@ var Player = (function() {
             return;
         }
 
+        // v3.12 R1: a transcode seeked while paused is reloaded from there.
+        if (_seekTarget !== null) {
+            _seekReload();
+            return;
+        }
+
         if (IS_TIZEN) {
             try {
                 var avplay = window.webapis.avplay;
@@ -901,6 +1023,7 @@ var Player = (function() {
         _resetPreparedTrack();
         _cuedAtSec = null;
         _pendingSeek = null;
+        _cancelSeekReload();
         if (IS_TIZEN) {
             try {
                 var avplay = window.webapis.avplay;
@@ -941,6 +1064,7 @@ var Player = (function() {
         state.currentTrack = null;
         _cuedAtSec = null;
         _pendingSeek = null;
+        _cancelSeekReload();
         _scrobbled = false;
         _scrobbleTrackId = null;
         _emit('queuechange');
@@ -1030,6 +1154,24 @@ var Player = (function() {
         // playhead crosses the threshold.
         if (_nextPreparedUrl || _preloadReady) {
             _resetPreparedTrack();
+        }
+        // v3.12 R1 (D175): a transcode has no byte ranges; it is reloaded from
+        // the target once the presses stop (playing) or at Play (paused). The
+        // position shows the target meanwhile.
+        if (_stream.transcoded) {
+            _seekTarget = seconds;
+            if (_seekTimer !== null) clearTimeout(_seekTimer);
+            _seekTimer = null;
+            if (state.isPlaying) {
+                _seekTimer = setTimeout(function() {
+                    _seekTimer = null;
+                    if (state.isPlaying) _seekReload();
+                }, SEEK_RELOAD_DELAY_MS);
+            }
+            state.currentTime = seconds;
+            _emitProgress(true);
+            _emit('seeked', state.currentTime);
+            return;
         }
         if (IS_TIZEN) {
             try {
@@ -1222,6 +1364,7 @@ var Player = (function() {
         index = Math.max(0, Math.min(index || 0, tracks.length - 1));
         _resetPreparedTrack();
         _pendingSeek = null;
+        _cancelSeekReload();
         state.queue = tracks.slice();
         state.originalQueue = tracks.slice();
         state.queueIndex = index;

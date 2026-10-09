@@ -547,3 +547,39 @@ acceptance was read. Never edit the text above silently.
   only (the TV uses AVPlay). Acceptance: `e2e/track-error-toast.spec.ts`
   RED (no per-track toast on 3.11) then 4 passed; the toast and AVPlay specs
   27 passed.
+- **D173 — One stream-URL decision (R1).** `SubsonicAPI.getStreamUrl(id,
+  opts)` appends `format`, `maxBitRate`, `timeOffset` after `id` when given
+  and is 3.11's byte for byte without them; `Player._streamUrlFor(api,
+  track, offset)` decides (the list `TRANSCODE_TYPES = ['opus']`, matched on
+  the suffix in any case or the contentType) and serves the load path, both
+  prepare-next paths and the seek reload. `timeOffset` is left out at 0.
+- **D174 — A transcode's duration is its metadata (R1.4 refined).** The
+  ticket said "from its metadata when the engine reports none". For a
+  transcode the engine's figure is only what is left after the offset (or
+  Infinity while it is made), so metadata comes first and the engine
+  (+ offset) only when the track has no duration. Other tracks keep 3.11's
+  rule exactly.
+- **D175 — Seek reloads wait for the presses to stop (R1.3).** Playing,
+  a seek in a transcode shows the target at once and reloads 400 ms after
+  the last press (each reload is a new ffmpeg on the server; Right ×9 on the
+  progress bar is one reload, at 90 s). Paused, the reload waits for Play.
+  The old stream's position is ignored meanwhile, so neither the display nor
+  prepare-next sees it. The A8 cue is not used for this and is never ended
+  by a reload.
+- **D176 — A seek's reload is not a new track.** No `trackchange`, the
+  scrobble state kept, and its failure (toasted like any other) does not
+  count toward `_consecutiveLoadFailures`.
+- **R1 acceptance read.** The mock first: songs 4, 9, 14, 19 are `.opus`
+  (`audio/ogg`); `tests/dev-server.js` answers `format=mp3` with silent MP3
+  frames, chunked, `Accept-Ranges: none`, a Range header ignored, and
+  `timeOffset` echoed. `e2e/opus.spec.ts`: 7 RED on 3.11, 7 GREEN (HTML5:
+  the URLs, the preload, Right ×9 → one request at `timeOffset=90`, 1:30
+  then advancing, resume at 42; AVPlay stub: open, reopen at the offset,
+  position, metadata duration, gapless next, resume, paused seek).
+  Playback-adjacent specs 112 passed. **Live (read-only):** 30,458 songs —
+  flac 29,760, m4a 431, mp3 267, **no opus**, so the Opus transcode itself is
+  for the TV. One FLAC asked for as MP3 320 (64 KB each): `audio/mpeg`, no
+  Content-Length, `Accept-Ranges: none`, a Range request answered 200 with
+  no Content-Range, and `timeOffset=30` accepted — the mock's model. First
+  byte after 9.7 s on the first request (0.37 s with the offset), which
+  bears on §8 question 2.
