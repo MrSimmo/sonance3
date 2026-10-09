@@ -202,6 +202,8 @@ SONANCE_SCALE=1 npx playwright test    # the same at 100 % (also 2 for 200 %)
 
 The suite runs against the mock server (`tests/mock-boot.js`), so it needs no Navidrome. The GitHub workflow in `.github/workflows/playwright.yml` runs it on every push and pull request to `main`.
 
+**Known CI failure:** one test, `R10 not visible on Now Playing` in `e2e/backdrop.spec.ts`, fails on GitHub's Linux runners and passes on the macOS machine the suite is developed on. It compares Now Playing with the Solid and Gradient backgrounds pixel by pixel, and headless Chromium on Linux draws that screen differently. Sonance runs on Samsung TVs (Tizen, Chromium 63), not desktop Linux browsers, so a red run caused by this test alone does not mean the app is broken. The cause is still being investigated; the test is kept at full strictness rather than disabled.
+
 ### Project structure
 
 ```
