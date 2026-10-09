@@ -690,3 +690,12 @@ acceptance was read. Never edit the text above silently.
   3.11 for any artist whose right column scrolls. Fixed with that one
   property (design spec first); `e2e/artist-popular.spec.ts` "D181" at 150 %
   and 200 % RED (13.5, 17.9 px) then GREEN.
+- **D182 — "BY SIMMO" leaves the splash and the wide icon (after the
+  release review, the user's request, 2026-10-09).** The launch splash
+  (`index.html`, `tests/mock-index.html`) shows the tile and "Sonance"
+  only; `icon-oblong-1920.png` shows the tile and "Sonance" only, the
+  wordmark centred vertically on the tile. The lockup already centres the
+  line box, but the ink (capitals, no descenders) sat 4.5 px low in it, so
+  `.name` is lifted 4 px: ink midline 540.5 against the tile's 540
+  (measured on the rendered PNG). Login and Settings → About keep "By
+  Simmo" (not asked). Same version, 3.12.0; both packages rebuilt.

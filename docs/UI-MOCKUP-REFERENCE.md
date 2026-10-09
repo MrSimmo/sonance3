@@ -906,9 +906,8 @@ Written before the CSS (S7 T2). Mockup 14.
     `linear-gradient(135deg, var(--accent), #8a4dff)` (the login tile's),
     glow `0 2rem 8rem rgba(var(--accent-rgb), 0.45)`; the S-wave SVG
     (`js/app.js` `_createLogoSvg`'s seven paths) at 16rem;
-  - "Sonance" 10rem / 700, `--text-primary`, 0.2rem tracking, 3.6rem above;
-  - "BY SIMMO" 2.6rem / 600, uppercase, 1rem tracking, `--text-secondary`,
-    1.2rem above.
+  - "Sonance" 10rem / 700, `--text-primary`, 0.2rem tracking, 3.6rem above.
+    No line under it (v3.12, D182: "BY SIMMO" removed).
   At the 150 % default the tile is 396 px (mockup 14 draws about 400).
 - **Timeline** (CSS `@keyframes` only; transform and opacity only):
 
@@ -1078,8 +1077,9 @@ keydown. No visual of its own.
   `Sonance3.wgt`.
 - `icon-oblong-1920.png` — 1920×1080, opaque RGB, full-bleed: the S-wave tile
   (440px, radius 104px, brand gradient) and the "Sonance" wordmark (216px/700,
-  `#f0f0f5`) over "BY SIMMO" (52px/600, 14px tracking, `#8e8ea0`), centred on a
-  flat `#0a0a0c` ground inside the central 80%. Source
+  `#f0f0f5`) alone, its ink centred vertically on the tile (v3.12, D182:
+  "BY SIMMO" removed), centred on a flat `#0a0a0c` ground inside the central
+  80%. Source
   `tests/tools/icon-oblong-1920.html`, built by
   `tests/tools/make-oblong-icon.js`. Packaged as `icon.png` in
   `Sonance3-Oblong.wgt`.

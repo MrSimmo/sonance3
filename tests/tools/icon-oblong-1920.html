@@ -54,15 +54,11 @@
         letter-spacing: 2px;
         line-height: 1;
         color: #f0f0f5;
-    }
-    .by {
-        margin-top: 34px;
-        margin-left: 8px;
-        font-family: 'SamsungOne', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        font-size: 52px;
-        font-weight: 600;
-        letter-spacing: 14px;
-        color: #8e8ea0;
+        /* The lockup centres this line box on the tile, but the ink (capital
+           height, no descenders) sits low in it: measured 4.5px below the
+           tile's midline at 216px. Lifted so the ink is centred (±0.5px). */
+        position: relative;
+        top: -4px;
     }
 </style>
 </head>
@@ -82,7 +78,6 @@
         </div>
         <div class="words">
             <div class="name">Sonance</div>
-            <div class="by">BY SIMMO</div>
         </div>
     </div>
 </div>

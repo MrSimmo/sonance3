@@ -78,7 +78,7 @@ test('R11 the splash is painted before the bundles run, and covers the screen', 
     tile: document.querySelector('.splash-tile')!.getBoundingClientRect().width,
     root: parseFloat(getComputedStyle(document.documentElement).fontSize),
     title: document.querySelector('.splash-title')!.textContent,
-    sub: document.querySelector('.splash-sub')!.textContent
+    text: (document.querySelector('.splash-logo')!.textContent || '').trim()
   }));
   expect(hold.app).toBe('undefined');
   expect(hold.opacity).toBe('1');
@@ -86,7 +86,8 @@ test('R11 the splash is painted before the bundles run, and covers the screen', 
   // runs seed another).
   expect(hold.tile).toBeCloseTo(26.4 * hold.root, 0);
   expect(hold.title).toBe('Sonance');
-  expect(hold.sub).toBe('BY SIMMO');
+  // The wordmark alone: no "BY SIMMO" line under it (2026-10-09, D182).
+  expect(hold.text).toBe('Sonance');
   await H.waitForScreen(page, 'home');
   expect(errors.pageErrors).toEqual([]);
 });
