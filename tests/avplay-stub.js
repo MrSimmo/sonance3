@@ -25,6 +25,8 @@
                 which is what a real device does and what T3's cascade needs
      setScript(a) one outcome per prepareAsync, consumed in order — e.g.
                 ['err','err','ok'] fails two loads then succeeds. Overrides mode.
+     prepareErrors the values the next failing prepareAsync calls pass to
+                their error callback, in order (default 'STUB_PREPARE_FAILED')
      fire(i, r) fire pending[i] with 'ok' or 'err' (manual mode)
      fireAll(r) fire every pending callback in registration order
      listener   the most recent object passed to setListener
@@ -39,6 +41,7 @@
     var avState = 'NONE';   // NONE -> IDLE -> READY -> PLAYING/PAUSED
     var listener = null;
     var duration = 214000;  // ms; arbitrary but stable
+    var prepareErrors = [];  // v3.12 R6: error values for the next prepareAsync failures
 
     function rec(call, arg) {
         log.push({ call: call, session: session, arg: arg === undefined ? null : arg });
@@ -115,7 +118,10 @@
             if (entry.ok) entry.ok();
         } else {
             rec('prepare:err', 'session#' + entry.session);
-            if (entry.err) entry.err('STUB_PREPARE_FAILED');
+            // v3.12 R6: a device passes a WebAPIException ({ name:
+            // 'NotSupportedError', ... }); a test queues the values to pass.
+            var errValue = prepareErrors.length ? prepareErrors.shift() : 'STUB_PREPARE_FAILED';
+            if (entry.err) entry.err(errValue);
         }
         return true;
     }
@@ -137,6 +143,8 @@
         get mode() { return api.mode; },
         set mode(m) { api.mode = m; },
         setScript: function (arr) { api.script = arr ? arr.slice() : null; },
+        get prepareErrors() { return prepareErrors; },
+        set prepareErrors(arr) { prepareErrors = arr ? arr.slice() : []; },
         get pending() {
             return pending.map(function (p, i) {
                 return { i: i, session: p.session, fired: p.fired };

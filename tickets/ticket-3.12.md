@@ -528,3 +528,22 @@ acceptance was read. Never edit the text above silently.
   lookups (`#content-area`, :94 and :654) resolve nothing: that element no
   longer exists (css :2895); left as they are. GREEN: 2 passed; the
   artist-related and focus-path specs 101 passed.
+- **D171 — The per-track toast (R6).** Wording: `<title> — format not
+  supported` or `<title> — couldn't be loaded` (the em dash of the existing
+  stop toast). `_onLoadFailure(label, cause)` shows it on every failure,
+  before the stop toast, so after three in a row the stop toast is the one
+  left on screen. AVPlay causes, checked against Samsung's AVPlay API
+  reference (2026-10-09): `onerror` passes an AVPlayError
+  (`PLAYER_ERROR_NOT_SUPPORTED_FILE`, `PLAYER_ERROR_NOT_SUPPORTED_FORMAT`
+  are "format"); `prepareAsync`'s error callback passes a WebAPIException
+  type (`NotSupportedError` is "format"); anything else is "load". The
+  AVPlay stub gains `prepareErrors` (the values a failing prepare passes).
+- **D172 — HTML5 cause: code 4 is not enough (R6 refined).** Probed in
+  Playwright's Chromium: an undecodable body, an HTTP 404, an HTTP 500, an
+  aborted and a refused request all give MediaError code 4; the message is
+  `PipelineStatus::DEMUXER_ERROR_COULD_NOT_OPEN…` for the first and
+  `MEDIA_ELEMENT_ERROR: Format error` for the rest. So "format" is code 4
+  whose message is not `MEDIA_ELEMENT_ERROR`; this is the browser fallback
+  only (the TV uses AVPlay). Acceptance: `e2e/track-error-toast.spec.ts`
+  RED (no per-track toast on 3.11) then 4 passed; the toast and AVPlay specs
+  27 passed.

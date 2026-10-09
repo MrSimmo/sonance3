@@ -263,7 +263,7 @@ var Player = (function() {
         el._onError = function() {
             var msg = el.error ? el.error.message : 'Unknown audio error';
             error('Player', 'Audio error: ' + msg);
-            _onLoadFailure('html5 error');
+            _onLoadFailure('html5 error', _html5Cause(el.error));
         };
 
         el._onWaiting = function() {
@@ -507,7 +507,7 @@ var Player = (function() {
                 onerror: function(err) {
                     if (gen !== _loadGeneration) return;
                     error('Player', 'AVPlay error: ' + err);
-                    _onLoadFailure('avplay onerror');
+                    _onLoadFailure('avplay onerror', _avplayCause(err));
                 },
                 onevent: function(eventType, eventData) {
                     log('Player', 'AVPlay event: ' + eventType);
@@ -555,13 +555,13 @@ var Player = (function() {
                         return;
                     }
                     error('Player', 'AVPlay prepare failed: ' + err);
-                    _onLoadFailure('avplay prepareAsync');
+                    _onLoadFailure('avplay prepareAsync', _avplayCause(err));
                 }
             );
         } catch (e) {
             if (gen !== _loadGeneration) return;
             error('Player', 'AVPlay exception: ' + e.message);
-            _onLoadFailure('avplay exception');
+            _onLoadFailure('avplay exception', _avplayCause(e));
         }
     }
 
@@ -629,11 +629,39 @@ var Player = (function() {
         }
     }
 
+    // v3.12 R6 (D171): why a track did not load, for its toast: 'format' when
+    // the engine could not read the media, 'load' otherwise. AVPlay's
+    // onerror passes an AVPlayError (PLAYER_ERROR_NOT_SUPPORTED_FILE /
+    // _FORMAT); prepareAsync's error callback and a thrown exception a
+    // WebAPIException, whose type for this is NotSupportedError (Samsung's
+    // AVPlay API reference).
+    function _avplayCause(err) {
+        var s = (err && typeof err === 'object') ? String(err.name || err.message || '') : String(err);
+        return /NOT_SUPPORTED|NotSupported/.test(s) ? 'format' : 'load';
+    }
+
+    // v3.12 R6 (D172): the browser fallback. Chromium reports MediaError 4
+    // (MEDIA_ERR_SRC_NOT_SUPPORTED) for an undecodable body and for a 404 or
+    // a refused request alike; for the latter its message is
+    // "MEDIA_ELEMENT_ERROR: Format error", for the former it names the media
+    // pipeline (DEMUXER_ERROR_...). Measured in Playwright's Chromium.
+    function _html5Cause(mediaError) {
+        if (!mediaError || mediaError.code !== 4) return 'load';
+        return /MEDIA_ELEMENT_ERROR/.test(mediaError.message || '') ? 'load' : 'format';
+    }
+
     // V3.9 S4 T3: single funnel for "this track would not load". Both backends
     // and all four failure paths route through it so the cap cannot be
-    // bypassed by adding another one.
-    function _onLoadFailure(label) {
+    // bypassed by adding another one. v3.12 R6: each failure names the track
+    // and its cause in a toast; the stop toast after the cap comes after it,
+    // so it is the one left on screen.
+    function _onLoadFailure(label, cause) {
         _consecutiveLoadFailures++;
+        var failed = state.currentTrack;
+        if (failed && typeof App !== 'undefined' && App.showToast) {
+            App.showToast((failed.title || 'Unknown track') + ' — ' +
+                (cause === 'format' ? 'format not supported' : 'couldn\'t be loaded'));
+        }
         if (_consecutiveLoadFailures < MAX_CONSECUTIVE_LOAD_FAILURES) {
             log('Player', 'Load failed (' + label + ') ' + _consecutiveLoadFailures +
                 '/' + MAX_CONSECUTIVE_LOAD_FAILURES + ' — advancing');
