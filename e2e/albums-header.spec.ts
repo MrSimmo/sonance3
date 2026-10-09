@@ -125,7 +125,12 @@ test('A2: with 3 of 4 libraries each sort reaches the full set, 0 duplicates, in
     expect(r.got, r.sort).toBe(r.want);
     expect(r.sameOrder, r.sort).toBe(true);
   }
-  // Wrapped back round to Name on the next press.
+  // v3.12 R2: Random follows Most played (its own spec, albums-random), then
+  // the cycle wraps back round to Name.
+  await page.evaluate(() => FocusManager.setActiveZone('library-header', 0, true));
+  await H.press(page, 'Enter');
+  expect(await label(page, 'library-chip-sort')).toBe('Sort: Random');
+  await page.waitForFunction(() => FocusManager.hasZone('library-grid'));
   await page.evaluate(() => FocusManager.setActiveZone('library-header', 0, true));
   await H.press(page, 'Enter');
   expect(await label(page, 'library-chip-sort')).toBe('Sort: Name');

@@ -905,6 +905,39 @@ var SubsonicAPI = (function() {
      * or single-element scope yields a single stream, i.e. the same requests
      * the unscoped path makes today.
      */
+    /**
+     * v3.12 R2 (D177): a random sample of albums, the Albums tab's Random
+     * sort. One getAlbumList2 type=random per library in scope (one unscoped
+     * request for all of them), never answered from the response cache: each
+     * call is a new roll. Two or more libraries are merged, deduped,
+     * shuffled and cut to `size`. A sample, not a page: no offset, so D23's
+     * cursor (which exists for paging) does not apply.
+     */
+    SubsonicAPI.prototype.getRandomAlbumSample = function(size, libraryIds) {
+        var self = this;
+        var scope = _normaliseScopeArg(libraryIds) || [null];
+        return Promise.all(scope.map(function(folderId) {
+            var params = { type: 'random', size: size };
+            if (folderId !== null) params.musicFolderId = folderId;
+            return self._request('getAlbumList2.view', params).then(function(data) {
+                var list = data && data.albumList2;
+                return _ensureArray(list && list.album);
+            });
+        })).then(function(perLibrary) {
+            if (perLibrary.length === 1) return _memoAlbumList(perLibrary[0].slice(0, size));
+            var all = [];
+            for (var i = 0; i < perLibrary.length; i++) {
+                for (var j = 0; j < perLibrary[i].length; j++) all.push(perLibrary[i][j]);
+            }
+            all = _dedupeById(all);
+            for (var k = all.length - 1; k > 0; k--) {
+                var r = Math.floor(Math.random() * (k + 1));
+                var tmp = all[k]; all[k] = all[r]; all[r] = tmp;
+            }
+            return _memoAlbumList(all.slice(0, size));
+        });
+    };
+
     SubsonicAPI.prototype.createAlbumListCursor = function(type, libraryIds, fetchSize, extra) {
         var scope = _normaliseScopeArg(libraryIds);
         return new AlbumListCursor(this, type, scope || [null], fetchSize, extra);

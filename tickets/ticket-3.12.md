@@ -583,3 +583,24 @@ acceptance was read. Never edit the text above silently.
   no Content-Range, and `timeOffset=30` accepted — the mock's model. First
   byte after 9.7 s on the first request (0.37 s with the offset), which
   bears on §8 question 2.
+- **D177 — Random albums: one sample, kept until chosen again (R2).** The
+  Sort chip's cycle ends Most played → Random → Name. Random calls
+  `SubsonicAPI.getRandomAlbumSample(500, libraries)`: one `getAlbumList2
+  type=random&size=500` per library in scope (one unscoped request for all),
+  through `_request`, not the response cache (otherwise "choosing it again"
+  would replay the cached roll); 2+ libraries are merged, deduped,
+  shuffled and cut to 500, a single source is the server's order as sent.
+  The sample is not a paged list, so it does not go through the D23
+  `AlbumListCursor`, and no offset-search count runs for it. The library
+  screen keeps `{ scope, albums }` until Random is chosen again (choosing
+  any other sort keeps it too, so returning to Random by a later cycle is a
+  new roll; leaving Library, Back from an album and clearing a genre filter
+  reuse it). Count line wording: **"Random sample of N albums"**. A genre
+  filter still means `byGenre`. The A2 spec's wrap assertion now expects
+  Random before Name. Acceptance: `e2e/albums-random.spec.ts` RED (the
+  cycle never reached Random), then 2 passed: exactly one
+  `type=random&size=500` and no offset, the grid equal to the mock's
+  sample, Back to the same album and index, the same sample after leaving,
+  a new request when Random is chosen again, and with two of three
+  libraries one request each (folders 1, 2), 500 ids, no duplicates, both
+  libraries present. Grid, focus-path and Home specs 49 passed.

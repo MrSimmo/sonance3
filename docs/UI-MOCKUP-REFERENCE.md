@@ -445,7 +445,8 @@ scrolls with the list):
 - unavailable (Sort while a genre filter is set): opacity 0.4, still
   focusable, Enter does nothing (the D55 pattern).
 - Albums: "⇅ Sort: Name" (Enter cycles Name → Artist → Recently added →
-  Year → Most played → Name; Left/Right move between the chips) and
+  Year → Most played → Random (v3.12) → Name; Left/Right move between the
+  chips) and
   "Filter: All genres" (Enter opens the genre picker; with a genre chosen it
   reads "Filter: Rock", the count line "377 albums · Rock", and Sort reads
   "Sort: Name", dimmed: the server orders a genre by name). The choice holds
@@ -1083,6 +1084,54 @@ keydown. No visual of its own.
 - The wide tile is confirmed on the Q90R (v3.11, D163). The v3.10-fix2
   diagnostic package (`Sonance3-Oblong-Diag.wgt`, D161) was not needed and
   is no longer built.
+
+## v3.12 surfaces (ticket-3.12 R2–R6) — written before the CSS
+
+No new tokens: each surface reuses a component above.
+
+**Albums: Random (R2).** The Sort chip's cycle gains **Random** at the end:
+Name → Artist → Recently added → Year → Most played → Random → Name. Random
+shows one random sample of the libraries in scope (at most 500 albums: the
+server's maximum), not a paged list; it stays the list until Random is
+chosen again, which re-rolls it. The count line reads **"Random sample of
+N albums"** (D177). Under a genre filter the list stays the genre's, as
+before.
+
+**Artists header (R3).** The Artists tab gets the Albums header: the same
+`.library-header` (first child of `#library-content`, so it scrolls with
+the grid), title "Artists", count "N artists" (the list's exact length;
+"1 artist"), and one `.library-chip`, "⇅ Sort: Name", which Enter cycles
+Name → Most albums → Random → Name. Name is the server's order; Most albums
+is album count descending, ties in the server's order; Random is shuffled
+once and re-rolled each time it is chosen. The choice holds for the session.
+Focus path as on Albums: the header is the `library-header` zone (entry on
+the chip, D54); Up from the grid's first row reaches it, Down returns to the
+grid, Left goes to the sub-nav, Up to the top nav.
+
+**Albums per Home row (R4).** Settings → Appearance, below Background:
+"Albums per Home row ◄ Standard ►" (`#settings-home-row-size-row`), a
+toggle row with three values, Standard (6), 9 and 12: Right and Enter step
+forward and wrap, Left steps back and wraps (D178). Stored in
+`sonance-home-row-size` (`9` or `12`; absent is Standard). Home's album rows
+(Recently Added, Recently Played, Your favourites, Most played, Rediscover)
+and the two rows' skeletons take that many `.album-card`s, the rows being
+the existing carousels (D68 scrolls the focused card into view); Your
+Playlists is unchanged. It applies the next time Home is built.
+
+**Popular (R5).** On the Artist screen, between DISCOGRAPHY and BIOGRAPHY,
+only when the server has top songs for the artist: an `.artist-section`
+labelled **POPULAR** holding up to 10 `.track-row`s (`#artist-popular-list`):
+the number (`.track-row-number`, 1–10), `.track-row-info` with the title
+(`.track-row-title`) and the album under it (`.track-row-album`, the artist
+line's look: 1.3rem `--text-secondary`, `--focus-ink-soft` focused), the
+star (`.track-row-star`, shown when starred or focused) and the duration.
+Focus is the row focus (fill, ink, `scale(1.02)` from the left). Zone
+`artist-popular`: albums ↔ Popular ↔ similar artists ↔ the NP bar, Left to
+the left panel; Enter plays the ten from that row, hold OK opens the
+options sheet (A5).
+
+**Track error toast (R6).** The existing `.sonance-toast`, text
+`<title> — format not supported` or `<title> — couldn't be loaded` (D171).
 
 ## Known discrepancies
 

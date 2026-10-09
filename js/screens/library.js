@@ -71,8 +71,16 @@ var LibraryScreen = (function() {
         // sort reaches all of them (live S5: 2,996 of 2,996; toYear 1 left
         // out 47).
         { type: 'byYear', label: 'Year', extra: { fromYear: 3000, toYear: 0 } },
-        { type: 'frequent', label: 'Most played' }
+        { type: 'frequent', label: 'Most played' },
+        // v3.12 R2 (D177): one random sample of the libraries in scope, not
+        // a paged list (_loadAlbumSample).
+        { type: 'random', label: 'Random', sample: true }
     ];
+    var RANDOM_SAMPLE_SIZE = 500;   // the most one getAlbumList2 returns
+    // The sample Random shows, { scope, albums }: kept until Random is
+    // chosen again, so leaving Library or Back from an album keeps its order
+    // (and the focus restore its album).
+    var _albumRandom = null;
     var _albumSort = 0;
     var _albumGenre = null;     // a genre name, or null for all genres
     var _albumLoadGen = 0;      // a page or a count for a list since replaced is dropped
@@ -577,6 +585,12 @@ var LibraryScreen = (function() {
         // A2: the header is there (and focusable) while the first page loads.
         if (!document.getElementById('library-header')) _mountAlbumsHeader(api);
 
+        if (list.sample) {
+            _albumLoader = null;
+            _loadAlbumSample(api, gen, libraryIds);
+            return;
+        }
+
         function fetchPage(count, loaderOffset) {
             if (!multi) {
                 return api.getAlbumList2(list.type, count, loaderOffset, libraryIds, list.extra);
@@ -665,7 +679,47 @@ var LibraryScreen = (function() {
     function _cycleAlbumSort(api) {
         if (_albumGenre) return;
         _albumSort = (_albumSort + 1) % ALBUM_SORTS.length;
+        // v3.12 R2: choosing Random (again) rolls a new sample.
+        if (ALBUM_SORTS[_albumSort].sample) _albumRandom = null;
         _reloadAlbums(api);
+    }
+
+    // v3.12 R2 (D177): Random's list, one sample (getRandomAlbumSample), the
+    // kept one when there is one for this scope. No PaginatedLoader, no
+    // offsets and no offset-search count; the count line is the sample's
+    // size, worded as a sample.
+    function _loadAlbumSample(api, gen, libraryIds) {
+        var scope = JSON.stringify(libraryIds || null);
+        var kept = (_albumRandom && _albumRandom.scope === scope) ? _albumRandom.albums : null;
+        var sample = kept ? Promise.resolve(kept) : api.getRandomAlbumSample(RANDOM_SAMPLE_SIZE, libraryIds);
+        sample.then(function(albums) {
+            if (_activeTab !== 'albums' || gen !== _albumLoadGen || !_contentContainer) return;
+            _albumRandom = { scope: scope, albums: albums };
+            _clearBelowHeader();
+            var line = document.getElementById('library-header-count');
+            if (line) {
+                line.textContent = 'Random sample of ' + SonanceUtils.formatCount(albums.length) +
+                    (albums.length === 1 ? ' album' : ' albums');
+            }
+            if (albums.length === 0) {
+                _contentContainer.appendChild(el('div', { className: 'home-empty library-empty' },
+                    'No albums found'));
+                _registerHeaderZone(_albumChips, 'nowplaying-bar');
+                App.registerNowPlayingBarZone('library-header');
+                return;
+            }
+            _renderAlbumsVirtual(albums, api);
+            _updateLoadingIndicator(false);
+            _registerAlbumsGridZone(api);
+        }).catch(function(err) {
+            if (_activeTab !== 'albums' || gen !== _albumLoadGen || !_contentContainer) return;
+            log('Library', 'Random albums failed: ' + err.message);
+            _clearBelowHeader();
+            _contentContainer.appendChild(el('div', { className: 'home-empty library-empty' },
+                'Unable to load albums'));
+            _registerHeaderZone(_albumChips, 'nowplaying-bar');
+            App.registerNowPlayingBarZone('library-header');
+        });
     }
 
     // A new sort or filter: the grid is rebuilt under the header, which keeps

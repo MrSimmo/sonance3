@@ -436,7 +436,9 @@
         var hitName = (/\/rest\/([A-Za-z0-9]+)/.exec(u) || [])[1];
         if (hitName) {
             window.__MOCK__.hits[hitName] = (window.__MOCK__.hits[hitName] || 0) + 1;
-            window.__MOCK__.calls.push({ endpoint: hitName, type: q.type || null, t: performance.now() });
+            // v3.12 R2: with the paging and scope of the request.
+            window.__MOCK__.calls.push({ endpoint: hitName, type: q.type || null, t: performance.now(),
+                size: q.size || null, offset: q.offset || null, folder: q.musicFolderId || null });
         }
 
         if (/ping\.view/.test(u)) {
