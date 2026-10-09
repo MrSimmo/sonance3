@@ -15,7 +15,7 @@ cd "$(dirname "$0")"
 OUTPUT="Sonance3.wgt"
 OUTPUT_OBLONG="Sonance3-Oblong.wgt"
 OBLONG_ICON="icon-oblong-1920.png"
-CACHE_BUST="v3-11"
+CACHE_BUST="v3-12"
 INDEX="index.html"
 
 # D59 (v3.10 R12, supersedes D46): the oblong home-row tile is a second

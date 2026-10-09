@@ -2,7 +2,7 @@
 
 **This is the design spec.** It has two parts:
 
-1. **As built (v3, through v3.11).** What `css/styles.css` and the
+1. **As built (v3, through v3.12).** What `css/styles.css` and the
    screens render today, with the values and line numbers they come from.
    Rewritten 2026-10-01 (v3.10 S1 T7): the previous version described the
    pre-v3 sidebar layout with outline focus rings, which no longer exists.
@@ -817,7 +817,7 @@ counting on Home) and is not persisted.
 - Below that, **Up next on Now Playing** (`#settings-np-upnext-row`,
   v3.10-fix2 F2): "Up next on Now Playing ◄ Show ►" / "Hide", the same
   two-value toggle row, stored in `sonance-np-upnext`. See "Up Next hidden".
-- About card reads `V3.11` and the platform (v3.11, D164).
+- About card reads `V3.12` and the platform (v3.12, R11; `V3.11` from D164).
 - Focus: rows and buttons take the focus fill (toggle rows no longer use an
   outline); swatches keep their white ring (D74).
 

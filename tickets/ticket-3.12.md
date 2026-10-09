@@ -670,3 +670,12 @@ acceptance was read. Never edit the text above silently.
   holds the drafts: PR #2's thank-you and close (its three commits linked),
   optional notes for #1 (asking @dbeley to confirm `nix-shell` on NixOS)
   and #5, and a release-notes paragraph @mentioning both. Nothing posted.
+- **R11 — Version 3.12.** About `V3.12`; cache-bust `v3-12` in `build.sh`,
+  the `index.html` stylesheet link (by hand) and `tests/mock-index.html`
+  (22 tags; no new script this session); `config.xml` `version="3.12.0"`
+  (its only change). `./build.sh` exit 0 (core 85,316 B, screens 157,343 B,
+  CSS 126,170 → 70,135 B); both packages hold the same 7 files, config,
+  index and bundles equal to the working tree's, icons 256×256 and
+  1920×1080; no `?.`/`??`; the live server's address is in neither (the
+  login placeholder's "e.g. 192.168.0.1" is, as in 3.11). `index.html` is
+  left bundled.
