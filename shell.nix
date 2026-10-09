@@ -8,6 +8,8 @@ pkgs.mkShell {
     gawk
     gnugrep
     coreutils        # wc, du, etc.
+    perl             # build.sh rewrites index.html's script block and fixes the bundles
+    gzip             # build.sh's size report
   ];
 
   shellHook = ''
