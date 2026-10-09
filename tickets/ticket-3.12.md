@@ -592,10 +592,10 @@ acceptance was read. Never edit the text above silently.
   shuffled and cut to 500, a single source is the server's order as sent.
   The sample is not a paged list, so it does not go through the D23
   `AlbumListCursor`, and no offset-search count runs for it. The library
-  screen keeps `{ scope, albums }` until Random is chosen again (choosing
-  any other sort keeps it too, so returning to Random by a later cycle is a
-  new roll; leaving Library, Back from an album and clearing a genre filter
-  reuse it). Count line wording: **"Random sample of N albums"**. A genre
+  screen keeps `{ scope, albums }` and shows it whenever the sort is
+  Random: leaving Library, Back from an album and clearing a genre filter
+  reuse it; cycling onto Random again (from Name, round the cycle) drops it
+  and rolls a new one. Count line wording: **"Random sample of N albums"**. A genre
   filter still means `byGenre`. The A2 spec's wrap assertion now expects
   Random before Name. Acceptance: `e2e/albums-random.spec.ts` RED (the
   cycle never reached Random), then 2 passed: exactly one
@@ -604,3 +604,21 @@ acceptance was read. Never edit the text above silently.
   a new request when Random is chosen again, and with two of three
   libraries one request each (folders 1, 2), 500 ids, no duplicates, both
   libraries present. Grid, focus-path and Home specs 49 passed.
+- **D179 — The Artists header and sort (R3).** The A2 header on the
+  Artists tab: "Artists", "N artists", one chip "⇅ Sort: Name" cycling Name
+  (the server's order) → Most albums (album count descending, ties in the
+  server's order) → Random (a rank per artist id, drawn once; cycling onto
+  Random again draws new ranks; an artist not yet ranked gets one, so a
+  refreshed list keeps the others' order). Sorted client-side from
+  `getArtists` (it returns every artist; the localStorage projection keeps
+  `albumCount`). Both render paths sort the same list; a sort rebuilds the
+  grid under the header, which keeps the focus on the chip. The grid's Up
+  goes to the header (both paths; `_registerGridZone` takes the zone above,
+  the top nav when none, so Genres is unchanged). Mock opt-in
+  `mockArtistAlbumCounts=1` gives counts 1–9 (the default is 3 for every
+  artist, as every capture shows). Acceptance: `e2e/artists-sort.spec.ts`
+  RED (no header), then 3 passed: chunked (40) and virtual (120), each order
+  against the fixtures, Up/Down/Left/Up paths, Random re-rolled, Back to the
+  same artist and index under Random, the order kept after leaving Library.
+  Focus-path, NP-bar, grid, focus-style, scale, smooth-scroll and
+  transition specs 88 passed.

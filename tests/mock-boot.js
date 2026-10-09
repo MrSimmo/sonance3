@@ -139,13 +139,17 @@
     // the range, so `getArtists` yields a realistic multi-bucket alphabetical
     // index while names still sort in fixture order.
     var LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    // v3.12 R3 opt-in: `?mockArtistAlbumCounts=1` gives the artists album
+    // counts from 1 to 9 (1 + 7k mod 9) for the Artists tab's "Most albums";
+    // off, every artist reports 3, as every earlier capture shows.
+    var VARIED_COUNTS = /[?&]mockArtistAlbumCounts=1/.test(window.location.search);
     var mockArtists = [];
     for (var k = 0; k < N_ARTISTS; k++) {
         var letter = LETTERS.charAt(Math.min(25, Math.floor(k * 26 / N_ARTISTS)));
         mockArtists.push({
             id: 'artist-' + k,
             name: letter + ' Artist ' + _pad(k + 1, ARTIST_W),
-            albumCount: 3,
+            albumCount: VARIED_COUNTS ? 1 + (k * 7) % 9 : 3,
             coverArt: 'artist-' + k,
             musicFolderId: _libraryForIndex(k, N_ARTISTS)
         });

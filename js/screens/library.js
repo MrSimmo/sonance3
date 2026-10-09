@@ -44,6 +44,19 @@ var LibraryScreen = (function() {
     var _artistsVirtualGrid = null; // VirtualGrid instance when count > 80
     var ARTISTS_VIRTUAL_THRESHOLD = 80;
     var ARTISTS_CHUNK_SIZE = 50;
+    // v3.12 R3 (D179): the Artists header's sort, kept for the session.
+    // getArtists returns every artist at once, so it sorts here. Random
+    // ranks each artist once (`_artistShuffle`, id -> rank), until Random is
+    // chosen again; Back and a return to Library keep the order and so the
+    // focus restore's artist.
+    var ARTIST_SORTS = [
+        { key: 'name', label: 'Name' },
+        { key: 'albums', label: 'Most albums' },
+        { key: 'random', label: 'Random' }
+    ];
+    var _artistSort = 0;
+    var _artistShuffle = null;
+    var _artistsRaw = null;    // the server's list, in its (name) order
     // v3.10 R4: the four ITEM_* sizes below are px at interface size 100 %;
     // they are passed through SonanceUtils.px() where the grids are built.
     var ARTIST_ITEM_HEIGHT = 180; // px — 100 avatar + name + count + 8px×2 padding + 24px row gap
@@ -468,6 +481,7 @@ var LibraryScreen = (function() {
             _artistsChunkRaf = null;
         }
         _artistsAll = null;
+        _artistsRaw = null;
         _artistsRenderedCount = 0;
 
         // V3.9 T1: same for the albums virtual grid — destroy() removes its
@@ -1113,6 +1127,14 @@ var LibraryScreen = (function() {
             return;
         }
 
+        _artistsRaw = artists;
+        _mountArtistsHeader(api, artists.length);
+        _renderArtistsGrid(api);
+    }
+
+    // The grid under the header, in the chosen order.
+    function _renderArtistsGrid(api) {
+        var artists = _sortedArtists(_artistsRaw);
         _artistsAll = artists;
         _artistsRenderedCount = 0;
 
@@ -1121,6 +1143,62 @@ var LibraryScreen = (function() {
         } else {
             _renderArtistsChunked(artists, api);
         }
+    }
+
+    // v3.12 R3: Name is the server's order; Most albums sorts by album count,
+    // ties in the server's order; Random by the kept ranks.
+    function _sortedArtists(artists) {
+        var key = ARTIST_SORTS[_artistSort].key;
+        if (key === 'name') return artists;
+        var rows = artists.map(function(a, i) { return { a: a, i: i }; });
+        if (key === 'albums') {
+            rows.sort(function(x, y) {
+                return ((y.a.albumCount || 0) - (x.a.albumCount || 0)) || (x.i - y.i);
+            });
+        } else {
+            if (!_artistShuffle) _artistShuffle = {};
+            rows.forEach(function(r) {
+                if (_artistShuffle[r.a.id] === undefined) _artistShuffle[r.a.id] = Math.random();
+            });
+            rows.sort(function(x, y) {
+                return (_artistShuffle[x.a.id] - _artistShuffle[y.a.id]) || (x.i - y.i);
+            });
+        }
+        return rows.map(function(r) { return r.a; });
+    }
+
+    // v3.12 R3: the Albums header (A2) on the Artists tab: title, count and
+    // one Sort chip.
+    function _mountArtistsHeader(api, count) {
+        var chips = [{ id: 'library-chip-artist-sort', icon: 'sort',
+            label: 'Sort: ' + ARTIST_SORTS[_artistSort].label,
+            onActivate: function() { _cycleArtistSort(api); } }];
+        _contentContainer.appendChild(_renderHeader('Artists',
+            SonanceUtils.formatCount(count) + (count === 1 ? ' artist' : ' artists'), chips));
+        _registerHeaderZone(chips, 'library-grid');
+    }
+
+    // Enter on the chip: the next order, the grid rebuilt under the header
+    // (which keeps its nodes and the focus on the chip). Choosing Random
+    // (again) shuffles anew.
+    function _cycleArtistSort(api) {
+        if (_activeTab !== 'artists' || !_artistsRaw) return;
+        _artistSort = (_artistSort + 1) % ARTIST_SORTS.length;
+        if (ARTIST_SORTS[_artistSort].key === 'random') _artistShuffle = null;
+        var label = document.querySelector('#library-chip-artist-sort .library-chip-label');
+        if (label) label.textContent = 'Sort: ' + ARTIST_SORTS[_artistSort].label;
+        if (_artistsVirtualGrid) {
+            _artistsVirtualGrid.destroy();
+            _artistsVirtualGrid = null;
+        }
+        if (_artistsChunkRaf !== null) {
+            cancelAnimationFrame(_artistsChunkRaf);
+            _artistsChunkRaf = null;
+        }
+        _artistsChunkedZoneRegistered = false;
+        FocusManager.unregisterZone('library-grid');
+        _clearBelowHeader();
+        _renderArtistsGrid(api);
     }
 
     // ≤80 artists: render in chunks of 50 via rAF so the first paint isn't
@@ -1158,7 +1236,7 @@ var LibraryScreen = (function() {
                 _artistsChunkRaf = requestAnimationFrame(appendChunk);
             } else if (!_artistsChunkedZoneRegistered) {
                 var artCols = _getGridColumnCount(grid) || 6;
-                _registerGridZone(artCols);
+                _registerGridZone(artCols, 'library-header');
                 _artistsChunkedZoneRegistered = true;
             }
         }
@@ -1262,7 +1340,8 @@ var LibraryScreen = (function() {
             },
             neighbors: {
                 left: 'library-subnav',
-                up: 'topnav',
+                // v3.12 R3: Up from the first row reaches the Sort chip.
+                up: 'library-header',
                 down: 'nowplaying-bar'
             }
         });
@@ -1757,7 +1836,9 @@ var LibraryScreen = (function() {
     //  Focus Zone Registration (non-albums)
     // =========================================
 
-    function _registerGridZone(cols) {
+    // `up`: the zone above the grid (v3.12 R3: the Artists header), the top
+    // nav when there is none.
+    function _registerGridZone(cols, up) {
         var zoneConfig = {
             selector: '#library-grid .focusable',
             columns: cols,
@@ -1775,7 +1856,7 @@ var LibraryScreen = (function() {
             neighbors: {
                 /* V3-6-fix NAV-2: Up goes to top nav, Left enters side sub-nav. */
                 left: 'library-subnav',
-                up: 'topnav',
+                up: up || 'topnav',
                 down: 'nowplaying-bar'
             }
         };
@@ -1838,6 +1919,7 @@ var LibraryScreen = (function() {
             _artistsChunkRaf = null;
         }
         _artistsAll = null;
+        _artistsRaw = null;
         _artistsRenderedCount = 0;
         // V3.7-fix9: reset so a re-entry re-registers cleanly.
         _artistsChunkedZoneRegistered = false;
