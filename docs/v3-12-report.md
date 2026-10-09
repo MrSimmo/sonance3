@@ -2,7 +2,7 @@
 
 v3.12 brings in the three open pull requests: #5 and #1 merged as they are,
 and #2's features rebuilt on 3.11's code, each crediting its author. Spec:
-`tickets/ticket-3.12.md` (R1–R11; decisions D167–D182 in its §9).
+`tickets/ticket-3.12.md` (R1–R11; decisions D167–D181 in its §9).
 Settings → About reads **V3.12**.
 
 ## 1. What changed
@@ -35,15 +35,39 @@ Settings → About reads **V3.12**.
   showed no albums, biography or similar artists (they were drawn into the
   page being left, which stays in the DOM for the zoom), and a slow answer
   for a page already left overwrote the next one. Fixed.
+- **An Artist page's first album, after Up (D181).** Found by the close-out
+  focus-clip sweep: once the right column scrolls (Popular makes it do so
+  on the mock; an artist with many albums did in 3.11), Up back to the top
+  left the first album row cut off by 13–24 px at 125–200 %. Fixed (the
+  column is the scroll's reference, as on the album page).
 - **PR #5** (test-helper input validation) and **PR #1** (`shell.nix`, the
   `#!/usr/bin/env bash` shebang) merged with real merge commits;
   `shell.nix` gains `perl` and `gzip`.
 - **Credits:** README "Contributors", `CHANGELOG-3.12.md`, and David BELEY's
   `Co-authored-by` on every commit that carries a #2 feature.
 
-## 2. Verification
+## 2. Verification (summary)
 
-Filled at close-out (T12): see below, section 7.
+- **Suite:** 258 tests (231 + 27 new), keyboard-only. Final runs after the
+  last change: 150 % 258 passed (exit 0); 100 % 258 passed (exit 0) on the
+  second run — the first final 100 % run failed once in `backdrop.spec.ts`
+  "R10 not visible on Now Playing" (max 25/255 against 2), which then passed
+  10 of 10 alone and with the specs before it; the 200 % subset 124 passed.
+  Before (3.11): 231 passed at 150 %.
+- **Every new behaviour seen failing first** (R1–R7, D181), or labelled a
+  guard where it must pass before and after (R4's default identity, R5's
+  empty case).
+- **Default unchanged:** Home's five `getAlbumList2` requests equal 3.11's
+  (`size=6`), and the 100 % Home screenshot is pixel-identical.
+- **Focus-clip sweep:** 0 clipped at 100/125/150/175/200 % (165 states each,
+  with the Artists chip, Popular rows, the new Settings row and Home with
+  12). Its first run found D181.
+- **Visual, 100 %:** 15 of 19 states identical to 3.11; Artists (the
+  header), Artist detail (Popular), Settings top and bottom (the new row,
+  About) differ, as intended. Details in section 7.
+- **Live (read-only):** Home, Albums → Random, Artists in each order and
+  Deadmau5's page with Popular; 0 page errors, no write request, no error
+  from the server.
 
 ## 3. Decisions (ticket §9)
 
@@ -63,6 +87,7 @@ Filled at close-out (T12): see below, section 7.
 | D178 | Albums per Home row: three values cycled; App's Home prefetch follows it |
 | D179 | The Artists header and its three orders |
 | D180 | Popular songs: `getTopSongs` by name, rows reuse `.track-row` |
+| D181 | The Artist right column is `position: relative`: Up from the rows below no longer cuts the first album row (found by the close-out sweep; latent in 3.11) |
 
 ## 4. TV checklist
 
@@ -182,6 +207,82 @@ Nothing has been posted: GitHub writes are yours.
 > hardening the test helpers. Install `Sonance3.wgt` or
 > `Sonance3-Oblong.wgt`; Settings → About reads V3.12.
 
-## 7. Verification (T12)
+## 7. Verification (T12, 2026-10-09)
 
-To be written at close-out.
+**e2e suite** (Playwright 1.63, Chromium, 1920×1080, DPR 1, keyboard only):
+
+```
+before (3.11), 150 %                 231 passed (15.7m)  exit=0
+after, 150 % (before D181)           256 passed (16.9m)  exit=0
+after, 100 % (before D181)           256 passed (16.6m)  exit=0
+after, 200 % subset (before D181)    122 passed (7.5m)   exit=0
+final, 150 %                         258 passed (16.9m)  exit=0
+final, 100 %, first run              257 passed, 1 failed (16.5m)  exit=1
+  ✘ backdrop.spec.ts:135 R10 not visible on Now Playing … Expected <= 2, Received 25
+  backdrop R10 alone, --repeat-each=10 at 100 %   10 passed
+  the 9 specs up to and including backdrop at 100 %  30 passed
+final, 100 %, second run             258 passed (16.7m)  exit=0
+final, 200 % subset                  124 passed (7.6m)   exit=0
+```
+
+The one failure is the test that already fails on GitHub's Linux runners
+(README "Known CI failure"); it plays only WAV tracks on Now Playing, whose
+code 3.12 does not touch. It is reported, not loosened (your rule).
+
+The 200 % subset: `focus-paths`, `npbar`, `focus-style`, `options-sheet`,
+`transitions`, `bundled-walk`, `ui-scale`, and the seven new specs
+(`opus`, `albums-random`, `artists-sort`, `home-row-size`,
+`artist-popular`, `track-error-toast`, `artist-scope`).
+
+**Focus-clip sweep** (`tests/tools/focus-clip-sweep.js`, 5 sizes): first
+run 0 at 100 %, 2 at 125–200 % (the Artist first album row, 11–18 px: D181);
+after D181 0 clipped at every size, 165 states each.
+
+**Visual, 100 %** (`visual-baseline.js --scale 1 --geometry`, T0 vs final;
+19 states, geometry ok in all, 0 page errors):
+
+| State | Differing px | Max Δ | Box (x0,y0–x1,y1) | Why |
+|---|---|---|---|---|
+| home | 0 | 0 | — | default unchanged |
+| library-artists | 623,520 | 215 | 368,138–1731,983 | the header; the grid moves down under it |
+| artist-detail | 9,720 | 214 | 429,364–1705,979 | Popular under the discography |
+| settings-top | 17,910 | 214 | 160,197–937,979 | the new row; About V3.12 |
+| settings-bottom | 15,947 | 229 | 158,108–937,301 | the rows below it move by one |
+| the other 14 | 0 | 0 | — | |
+
+Login differed by 85 px (max 13) in one capture of three: the known
+capture artefact (v3.10 S7); 0 in the other two.
+
+**Live** (bundled 3.12 build through the Node-side proxy; resume off; no
+playback; Settings not shown):
+
+```
+home album lists: frequent:6 newest:6 random:6 recent:6 starred:6
+albums random: "Sort: Random", "Random sample of 500 albums"; one request random:500
+artists: 1,100 artists; Most albums: Various Artists (688), Deadmau5 (114), Ludwig Van Beethoven (99), Gorgon City (42) …
+artist Deadmau5: DISCOGRAPHY, POPULAR (10), BIOGRAPHY, SIMILAR ARTISTS
+page errors: 0; write endpoints: none; server responses >= 400: none
+(one 404 from the dev server: $WEBAPIS/webapis/webapis.js, Tizen's own include, expected in a browser)
+```
+
+R1 live: 30,458 songs (flac 29,760, m4a 431, mp3 267), no Opus. One FLAC
+asked for as MP3 320 (64 KB): `audio/mpeg`, no Content-Length,
+`Accept-Ranges: none`, Range ignored, `timeOffset=30` accepted; first byte
+9.7 s, then 0.37 s. R5 live: top songs Deadmau5 10, Various Artists 0,
+Ludwig Van Beethoven 0, "00.db" 0.
+
+**Packages:** `Sonance3.wgt` and `Sonance3-Oblong.wgt` each hold config.xml,
+icon.png, index.html, the two bundles and css/styles.css; config, index and
+bundles are byte-identical to the working tree's; icons 256×256 and
+1920×1080; `version="3.12.0"`; About `V3.12`; `?v=v3-12` ×3; no `?.`/`??`;
+the live server's address in neither.
+
+**Authorship:** `ca4e38e` (anupamme) and `e08bdac` (dbeley) are reachable
+through the merges 7c05958 and f3429ee; every R1–R7 commit (and D181)
+carries `Co-authored-by: David BELEY`.
+
+**Credential hygiene:** every file changed this session audited inside
+Node: 0 `t`/`s` pairs (so 0 replayable), the 3 key-adjacent matches are
+prose about the account file (two from the initial commit, one the line
+D166 redacted); the whole-token matches are the ordinary English word the
+account uses.

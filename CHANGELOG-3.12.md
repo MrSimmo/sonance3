@@ -18,6 +18,7 @@ Install **one** package: `Sonance3.wgt` (square icon) or `Sonance3-Oblong.wgt` (
 
 ## Fixed
 
+- Moving back up an artist page no longer leaves the first album cut off at the top (larger interface sizes)
 - Opening a similar artist from an artist page now shows that artist's albums, biography and similar artists (they could be drawn on the page being left), and a slow answer for a page you have left no longer fills the next one (dbeley)
 
 ## For developers
