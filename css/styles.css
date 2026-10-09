@@ -5031,6 +5031,9 @@ html.backdrop-gradient .np-screen {
     padding-bottom: 2.4rem;
     padding-right: 4rem;
     margin-left: 4.8rem;
+    /* v3.12 D181: the offsetParent the focus-follow scroll (artist.js
+       _scrollToFocused) measures against, as .album-detail-right is. */
+    position: relative;
 }
 
 .artist-section + .artist-section {

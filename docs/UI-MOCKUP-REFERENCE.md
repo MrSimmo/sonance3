@@ -1129,7 +1129,11 @@ the number (`.track-row-number`, 1–10), `.track-row-info` with the title
 (`.track-row-title`) and the album under it (`.track-row-album`, the artist
 line's look: 1.3rem `--text-secondary`, `--focus-ink-soft` focused), the
 star (`.track-row-star`, shown when starred or focused) and the duration.
-Focus is the row focus (fill, ink, `scale(1.02)` from the left). Zone
+Focus is the row focus (fill, ink, `scale(1.02)` from the left). The
+right column, `.artist-detail-right`, is `position: relative`, as
+`.album-detail-right` is: its focus-follow scroll measures `offsetTop`
+against it (D181; before, against `#page-current`, which cut the first
+album row by 13–24 px when Up came back from rows below). Zone
 `artist-popular`: albums ↔ Popular ↔ similar artists ↔ the NP bar, Left to
 the left panel; Enter plays the ten from that row, hold OK opens the
 options sheet (A5).

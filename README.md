@@ -179,7 +179,7 @@ The lyrics panel shows the current line highlighted in bold, with past and upcom
 - **HTML5 Audio** fallback — for browser-based development and testing
 - **Subsonic REST API** with OpenSubsonic extensions — compatible with Navidrome, Subsonic, Airsonic, and others
 - **Tizen Web App** — packaged as a `.wgt` widget
-- **Playwright** — an end-to-end test suite (231 tests, keyboard-only) against a mock server
+- **Playwright** — an end-to-end test suite (256 tests, keyboard-only) against a mock server
 
 The app package is ~100 KB and loads instantly. Zero external dependencies at runtime.
 

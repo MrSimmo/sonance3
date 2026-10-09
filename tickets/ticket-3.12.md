@@ -679,3 +679,14 @@ acceptance was read. Never edit the text above silently.
   1920×1080; no `?.`/`??`; the live server's address is in neither (the
   login placeholder's "e.g. 192.168.0.1" is, as in 3.11). `index.html` is
   left bundled.
+- **D181 — The Artist right column is the scroll's offsetParent.** The
+  close-out focus-clip sweep (5 sizes) found the first album row cut 11–18
+  px at 125–200 % on the Artist screen, which only Popular makes tall enough
+  to scroll on the mock. `artist.js` `_scrollToFocused` reads `offsetTop`,
+  and `.artist-detail-right` was not positioned, so it measured against
+  `#page-current` and Up back from the rows below overshot (probe: row top
+  −24/−13/−18 px inside the column at 125/150/200 %; with `position:
+  relative` +24/+29/+38). `.album-detail-right` already had it. Latent in
+  3.11 for any artist whose right column scrolls. Fixed with that one
+  property (design spec first); `e2e/artist-popular.spec.ts` "D181" at 150 %
+  and 200 % RED (13.5, 17.9 px) then GREEN.

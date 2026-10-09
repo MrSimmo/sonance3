@@ -3,8 +3,10 @@
 //
 // For 14 screen states on the mock rig (S7: + the options sheet and its
 // credits view; v3.10-fix2: + both credits views scrolled to the end, Now
-// Playing with Up Next hidden and with Focus mode on), focuses the first
-// and the last item
+// Playing with Up Next hidden and with Focus mode on; v3.12: + Home with
+// 12 albums a row and the Settings "Albums per Home row" row — the Artists
+// header's chip and the Artist screen's Popular rows are zones of the
+// existing Library and Artist states), focuses the first and the last item
 // of every registered content zone, waits for the focus transform to settle,
 // and reports what a clipping ancestor cuts off:
 // - `box`:  e2e/helpers/geometry.js measure().focusClip, the focused element's
@@ -222,6 +224,20 @@ async function run(scale) {
     await H.navTo(page, 'settings');
     await page.waitForTimeout(300);
     await sweepZones(page, 'settings', results);
+    // v3.12 R4: the "Albums per Home row" row, mid-zone (not a first or last).
+    await page.evaluate(() => {
+        var els = document.querySelectorAll('#settings-left .focusable:not(.accent-swatch):not(.settings-library-row)');
+        var i = Array.prototype.indexOf.call(els, document.getElementById('settings-home-row-size-row'));
+        FocusManager.setActiveZone('settings-actions', i, true);
+    });
+    await H.settle(page, 30);
+    await G.settled(page).catch(() => {});
+    m = await G.measure(page);
+    results.push({ state: 'settings', zone: 'settings-actions', index: 'home-row-size', el: 'settings-home-row-size-row', focusClip: m.focusClip, ring: await ringProbe(page) });
+    await page.close();
+    // v3.12 R4: Home with 12 albums a row (the last item is the 12th card).
+    page = await fresh({ storage: { 'sonance-home-row-size': '12' } });
+    await sweepZones(page, 'home-12', results);
     await page.close();
     // Now Playing (lyrics available)
     page = await fresh({ extra: 'mockLyrics=1' });

@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as H from './helpers/sonance';
+import * as G from './helpers/geometry';
 
 // v3.12 R5 (ticket-3.12 §6): a POPULAR section on the Artist screen, after
 // the discography and before the biography, only when getTopSongs (by
@@ -151,3 +152,29 @@ test('R5 guard (passes on 3.11 too): no top songs, or an error: no section, no z
   expect(await page.evaluate(() => !!document.querySelector('.sonance-toast'))).toBe(false);
   expect(errors.pageErrors).toEqual([]);
 });
+
+// v3.12 (D181): with Popular the right column scrolls on the mock, which
+// showed that its focus-follow scroll measured offsetTop against
+// #page-current, not the column: Down through Popular and Up back left the
+// first album row cut at the column's top (13-24 px at 125-200 %).
+for (const scale of [1.5, 2]) {
+  test(`R5 D181 Down through Popular and Up back: the first album row is not clipped at ${scale * 100}%`, async ({ page }) => {
+    await H.bootMock(page, { scale, albums: 60, artists: 120, songs: 60 });
+    await openArtist(page, 0);
+    await page.waitForFunction(() => !!document.querySelector('#page-current #artist-popular-list'));
+    for (let i = 0; i < 12; i++) { await H.press(page, 'ArrowDown'); await H.settle(page, 30); }
+    expect(await H.focus(page)).toMatchObject({ zone: 'artist-popular', index: 9 });
+    expect(await page.evaluate(() => document.querySelector('#page-current .artist-detail-right')!.scrollTop)).toBeGreaterThan(0);
+    for (let i = 0; i < 12 && (await H.focus(page)).zone !== 'artist-albums'; i++) { await H.press(page, 'ArrowUp'); await H.settle(page, 30); }
+    expect(await H.focus(page)).toMatchObject({ zone: 'artist-albums', index: 0 });
+    await H.settle(page, 100);
+    await G.settled(page).catch(() => {});
+    const m = await G.measure(page);
+    expect(m.focusClip).toEqual([]);
+    const top = await page.evaluate(() => {
+      const el = FocusManager.getCurrentFocused()!;
+      return el.getBoundingClientRect().top - el.closest('.artist-detail-right')!.getBoundingClientRect().top;
+    });
+    expect(top).toBeGreaterThan(0);
+  });
+}
