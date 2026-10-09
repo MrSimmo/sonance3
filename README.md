@@ -2,7 +2,7 @@
 
 **A music player for Samsung Tizen TVs, built to stream from your self-hosted Navidrome or Subsonic-compatible server.**
 
-![Sonance](screenshots/logo.png)
+![Sonance](screenshots/nowplaying.png)
 
 Sonance turns your Samsung smart TV into a full-featured music player. Browse your library, play albums, search your collection, and enjoy synced lyrics — all from your sofa with just the TV remote.
 
@@ -60,7 +60,7 @@ This is Version 3 of Sonance — a UI rewrite with a completely new hardware-acc
 
 ## Screenshots
 
-![Now Playing with Up Next](screenshots/nowplaying.png)
+
 ![Song credits](screenshots/songcredits.png)
 ![Album](screenshots/album.png)
 ![Hold OK options](screenshots/longpressoptions.png)
@@ -80,13 +80,15 @@ This is Version 3 of Sonance — a UI rewrite with a completely new hardware-acc
 1. Download **one** of the two packages from the [latest release](../../releases/latest):
    - `Sonance3.wgt` — square launcher icon
    - `Sonance3-Oblong.wgt` — wide 16:9 tile on the TV's home row
-2. Install using [Jellyfin2Samsung](https://github.com/Jellyfin2Samsung/Samsung-Jellyfin-Installer):
+2. Install using [Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung):
    - Enable Developer Mode on your TV (Settings → Apps → Developer Mode)
-   - Open Jellyfin2Samsung on your computer
+   - Open Apps2Samsung on your computer
    - Go to Settings → select the downloaded `Sonance3.wgt` or `Sonance3-Oblong.wgt`
    - Enter your TV's IP address and install
 
 Both packages are the same app with the same app id, so installing one replaces the other. If the home-row tile still shows the old shape after switching, remove the tile from the home row and add it again from Apps (or uninstall Sonance and install the package fresh).
+
+Note: Recent versions of Apps2Samsung might state the WGT has a certificate error, using the re-sign option should mitigate this, alternatively v2.x.x is reported to work fine as a fallback.
 
 ### Option 2: Build from source
 
@@ -273,7 +275,7 @@ This app targets Samsung TVs from 2019, which run Chromium 63. Key limitations t
 ## Licence
 
 GNU GPL v3. You are free to use this however you want as long as it stays free and open-source. You cannot commercialise this or close source any version of it. 
-You cannot use this to train AI.
+
 
 ## Acknowledgements
 
@@ -281,3 +283,4 @@ You cannot use this to train AI.
 - [Subsonic API](http://www.subsonic.org/pages/api.jsp) and [OpenSubsonic](https://opensubsonic.netlify.app/) — the API that ties it all together
 - [Jellyfin2Samsung](https://github.com/nicko88/Jellyfin2Samsung) — for making Tizen sideloading painless
 - [Samsung Tizen Developer](https://developer.samsung.com/smarttv/) — AVPlay API documentation
+- I've used AI to help diagnose issues and build fixes
