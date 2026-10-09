@@ -36,7 +36,9 @@ var HomeScreen = (function() {
         { key: 'frequent', type: 'frequent', title: 'Most played', before: 'home-playlists-section' },
         { key: 'rediscover', type: 'random', title: 'Rediscover', before: null }
     ];
-    var EXTRA_ROW_SIZE = 6;
+    // v3.12 R4 (D178): albums per row (Settings -> Appearance), for every
+    // album row and the two rows' skeletons; read when Home is built.
+    var _rowSize = 6;
 
     // =========================================
     //  Scroll Helper (Chromium 63 safe)
@@ -92,6 +94,7 @@ var HomeScreen = (function() {
 
     function render(container) {
         _container = container;
+        _rowSize = SonanceSettings.homeRowSize;
 
         var wrapper = el('div', { className: 'home-screen' });
 
@@ -105,7 +108,7 @@ var HomeScreen = (function() {
         var newestSection = el('div', { className: 'home-section' });
         newestSection.appendChild(el('div', { className: 'home-section-heading' }, 'Recently Added'));
         var newestRow = el('div', { className: 'home-row', id: 'home-newest-row' });
-        newestRow.appendChild(SonanceComponents.renderSkeletonCards(6, 162, 220, 'skeleton-card'));
+        newestRow.appendChild(SonanceComponents.renderSkeletonCards(_rowSize, 162, 220, 'skeleton-card'));
         newestSection.appendChild(newestRow);
         wrapper.appendChild(newestSection);
 
@@ -113,7 +116,7 @@ var HomeScreen = (function() {
         var recentSection = el('div', { className: 'home-section' });
         recentSection.appendChild(el('div', { className: 'home-section-heading', id: 'home-recent-heading' }, 'Recently Played'));
         var recentRow = el('div', { className: 'home-row', id: 'home-recent-row' });
-        recentRow.appendChild(SonanceComponents.renderSkeletonCards(6, 162, 220, 'skeleton-card'));
+        recentRow.appendChild(SonanceComponents.renderSkeletonCards(_rowSize, 162, 220, 'skeleton-card'));
         recentSection.appendChild(recentRow);
         wrapper.appendChild(recentSection);
 
@@ -189,8 +192,8 @@ var HomeScreen = (function() {
         _extraPending = EXTRA_ROWS.length;
 
         // Fetch all data in parallel
-        var newestPromise = api.getAlbumList2('newest', 6, 0, libraryIds);
-        var recentPromise = api.getAlbumList2('recent', 6, 0, libraryIds);
+        var newestPromise = api.getAlbumList2('newest', _rowSize, 0, libraryIds);
+        var recentPromise = api.getAlbumList2('recent', _rowSize, 0, libraryIds);
         var playlistPromise = api.getPlaylists();
 
         Promise.all([newestPromise, recentPromise, playlistPromise]).then(function(results) {
@@ -228,7 +231,7 @@ var HomeScreen = (function() {
             requestAnimationFrame(function() {
                 if (gen !== _gen) return;
                 EXTRA_ROWS.forEach(function(row) {
-                    api.getAlbumList2(row.type, EXTRA_ROW_SIZE, 0, libraryIds).then(function(albums) {
+                    api.getAlbumList2(row.type, _rowSize, 0, libraryIds).then(function(albums) {
                         if (gen !== _gen) return;
                         _extraPending--;
                         _renderExtraRow(row, albums || [], api);

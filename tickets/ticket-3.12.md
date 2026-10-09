@@ -622,3 +622,20 @@ acceptance was read. Never edit the text above silently.
   same artist and index under Random, the order kept after leaving Library.
   Focus-path, NP-bar, grid, focus-style, scale, smooth-scroll and
   transition specs 88 passed.
+- **D178 — Albums per Home row (R4).** `SonanceSettings.homeRowSize` (6, 9
+  or 12) is read from `localStorage['sonance-home-row-size']` at load, like
+  the other settings; Standard removes the key. The Settings row sits
+  directly after Background (before "Up next on Now Playing"); with three
+  values, Right and Enter step forward and wrap, Left steps back and wraps
+  (the ticket's "cycle it, as on the Background row"). Home reads the size
+  when it renders: the five album rows' requests, the two skeleton rows,
+  and the extra rows (`EXTRA_ROW_SIZE` removed). App's Home prefetch
+  (`getAlbumList2 newest`) follows it too: V3.9 made it Home's exact request
+  so the response cache serves Home, and at 9 it was a stray `size=6`
+  request (found by the R4 test). Your Playlists is unchanged. Acceptance:
+  `e2e/home-row-size.spec.ts` — the default guard passes on 3.11 and after
+  (the five URLs equal T0's, 6 skeletons); RED for the row, 9 and 12, then
+  4 passed: the row's cycle, storage and reload; rows of 9 and their
+  skeletons; rows of 12, Right to the 12th with the row scrolled and the
+  focus unclipped at 150 %. Home, focus-path, NP-bar, prefetch, focus-style,
+  scale, backdrop, Up Next, overlay, smooth-scroll and smoke specs 94 passed.

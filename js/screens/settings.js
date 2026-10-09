@@ -168,6 +168,23 @@ var SettingsScreen = (function() {
         });
         appearanceSection.appendChild(backdropRow);
 
+        // --- Albums per Home row (v3.12 R4, D178) ---
+        // Standard / 9 / 12; the next row in the settings-actions zone. Home
+        // reads it when it is next built.
+        var rowSizeRow = el('div', {
+            className: 'settings-toggle-row focusable',
+            id: 'settings-home-row-size-row'
+        });
+        rowSizeRow.appendChild(el('span', { className: 'settings-toggle-label' }, 'Albums per Home row'));
+        rowSizeRow.appendChild(el('span', {
+            className: 'settings-toggle-value',
+            id: 'settings-home-row-size-value'
+        }, _homeRowSizeLabel()));
+        rowSizeRow.addEventListener('click', function() {
+            _stepHomeRowSize('enter');
+        });
+        appearanceSection.appendChild(rowSizeRow);
+
         // --- Up next on Now Playing (v3.10-fix2 F2) ---
         // Show / Hide; Now Playing reads it when it renders (Settings and
         // Now Playing are never on screen together).
@@ -392,6 +409,28 @@ var SettingsScreen = (function() {
         log('Settings', 'Background: ' + SonanceSettings.backdrop);
     }
 
+    // v3.12 R4 (D178): three values, cycled like the two-value rows: Right
+    // and Enter step forward and wrap, Left steps back and wraps.
+    var HOME_ROW_SIZES = [6, 9, 12];
+
+    function _homeRowSizeLabel() {
+        return SonanceSettings.homeRowSize === 6 ? 'Standard' : String(SonanceSettings.homeRowSize);
+    }
+
+    function _stepHomeRowSize(direction) {
+        var n = HOME_ROW_SIZES.length;
+        var i = HOME_ROW_SIZES.indexOf(SonanceSettings.homeRowSize);
+        if (i < 0) i = 0;
+        SonanceSettings.homeRowSize = HOME_ROW_SIZES[(i + (direction === 'left' ? n - 1 : 1)) % n];
+        try {
+            if (SonanceSettings.homeRowSize === 6) localStorage.removeItem('sonance-home-row-size');
+            else localStorage.setItem('sonance-home-row-size', String(SonanceSettings.homeRowSize));
+        } catch (e) { /* storage full: the change holds for this session */ }
+        var valEl = document.getElementById('settings-home-row-size-value');
+        if (valEl) valEl.textContent = _homeRowSizeLabel();
+        log('Settings', 'Albums per Home row: ' + SonanceSettings.homeRowSize);
+    }
+
     function _toggleNpUpNext() {
         SonanceSettings.npUpNext = SonanceSettings.npUpNext === 'hide' ? 'show' : 'hide';
         try {
@@ -435,6 +474,7 @@ var SettingsScreen = (function() {
     var TOGGLE_ROWS = {
         'settings-ui-scale-row': function(direction) { _stepUiScale(direction); },
         'settings-backdrop-row': function() { _toggleBackdrop(); },
+        'settings-home-row-size-row': function(direction) { _stepHomeRowSize(direction); },
         'settings-np-upnext-row': function() { _toggleNpUpNext(); },
         'settings-auto-np-row': function() { _toggleAutoNowPlaying(); },
         'settings-resume-queue-row': function() { _toggleResumeQueue(); },
@@ -591,7 +631,8 @@ var SettingsScreen = (function() {
         // actually holds them, and the two `:not()` exclusions keep the
         // swatches (own zone) and the library rows (own zone) out, so the
         // resulting order is accent-reset, settings-ui-scale-row (v3.10 S2),
-        // settings-backdrop-row (S7), settings-np-upnext-row (fix2),
+        // settings-backdrop-row (S7), settings-home-row-size-row (v3.12),
+        // settings-np-upnext-row (fix2),
         // settings-auto-np-row,
         // settings-resume-queue-row (S6), settings-perf-hud-row (S1),
         // settings-smooth-scroll-row (S5), settings-logout-btn — the visual

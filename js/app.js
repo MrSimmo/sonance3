@@ -19,7 +19,11 @@ var SonanceSettings = {
     npUpNext: localStorage.getItem('sonance-np-upnext') === 'hide' ? 'hide' : 'show',
     // v3.10-fix2 F7: Now Playing's Focus mode (the 50 % dim), remembered
     // until toggled off. Default off ('on' / 'off').
-    npFocus: localStorage.getItem('sonance-np-focus') === 'on'
+    npFocus: localStorage.getItem('sonance-np-focus') === 'on',
+    // v3.12 R4 (D178): Settings -> Appearance -> Albums per Home row. 6
+    // (Standard, the default: no key stored), 9 or 12; read when Home is built.
+    homeRowSize: localStorage.getItem('sonance-home-row-size') === '12' ? 12
+        : (localStorage.getItem('sonance-home-row-size') === '9' ? 9 : 6)
 };
 
 // Applied as this file loads, before the shell (and its #app-backdrop) is
@@ -993,7 +997,8 @@ var App = (function() {
         }
 
         if (screenId === 'home') {
-            api.getAlbumList2('newest', 6, 0, libraryIds).then(warm).catch(function() {});
+            // v3.12 R4: Home's own request, so its size follows the setting.
+            api.getAlbumList2('newest', SonanceSettings.homeRowSize, 0, libraryIds).then(warm).catch(function() {});
         } else if (screenId === 'library') {
             api.getAlbumList2('alphabeticalByName', 50, 0, libraryIds).then(warm).catch(function() {});
         }

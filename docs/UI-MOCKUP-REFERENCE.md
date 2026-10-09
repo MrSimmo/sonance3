@@ -811,7 +811,10 @@ counting on Home) and is not persisted.
 - Below it, **Background** (`#settings-backdrop-row`, v3.10 S7, R10,
   mockup 13): "Background ◄ Solid ►" / "Gradient", a two-value toggle row
   (Left, Right and Enter all switch it). See "Gradient backdrop" below.
-- Below Background, **Up next on Now Playing** (`#settings-np-upnext-row`,
+- Below Background, **Albums per Home row** (`#settings-home-row-size-row`,
+  v3.12 R4): "Albums per Home row ◄ Standard ►" / "9" / "12"; see "v3.12
+  surfaces".
+- Below that, **Up next on Now Playing** (`#settings-np-upnext-row`,
   v3.10-fix2 F2): "Up next on Now Playing ◄ Show ►" / "Hide", the same
   two-value toggle row, stored in `sonance-np-upnext`. See "Up Next hidden".
 - About card reads `V3.11` and the platform (v3.11, D164).
@@ -992,7 +995,8 @@ Written before the CSS (S7 T2). Mockup 18.
 
 - Order: hero, Recently Added, Recently Played, **Your favourites**
   (`getAlbumList2 type=starred`), **Most played** (`frequent`), Your
-  Playlists, **Rediscover** (`random`). Six album cards each, the same
+  Playlists, **Rediscover** (`random`). Six album cards each (v3.12 R4: or
+  9 or 12, the Settings choice, for every album row), the same
   `.album-card` as Recently Added.
 - A new row's section is in the DOM from the first render but `display:
   none`, and shows only when its list arrives non-empty. Its request goes
