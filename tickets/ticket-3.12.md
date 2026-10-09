@@ -662,3 +662,11 @@ acceptance was read. Never edit the text above silently.
   fix-up. **Live (read-only, count 10):** Deadmau5 10 (764 ms), Various
   Artists 0, Ludwig Van Beethoven 0, "00.db" 0 — the server's Last.fm agent
   answers for some artists.
+- **R10 — Credits.** README: a "Contributors" section before
+  Acknowledgements (both people, each PR linked), the 3.12 line in the
+  introduction, and the 3.12 features in Features and Settings.
+  `CHANGELOG-3.12.md` (the 3.9–3.11 changelog's New / Improved / Fixed
+  shape, plus "For developers") credits both. `docs/v3-12-report.md` §6
+  holds the drafts: PR #2's thank-you and close (its three commits linked),
+  optional notes for #1 (asking @dbeley to confirm `nix-shell` on NixOS)
+  and #5, and a release-notes paragraph @mentioning both. Nothing posted.

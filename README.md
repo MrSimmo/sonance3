@@ -6,18 +6,19 @@
 
 Sonance turns your Samsung smart TV into a full-featured music player. Browse your library, play albums, search your collection, and enjoy synced lyrics — all from your sofa with just the TV remote.
 
-This is Version 3 of Sonance — a UI rewrite with a completely new hardware-accelerated interface and multiple library support. **Version 3.11** makes it readable and responsive from the sofa: a larger, adjustable interface, a clear focus highlight, faster navigation, and a much richer Now Playing screen. See [CHANGELOG-3.9 to 3.11.md](CHANGELOG-3.9%20to%203.11.md) for what changed.
+This is Version 3 of Sonance — a UI rewrite with a completely new hardware-accelerated interface and multiple library support. **Version 3.11** made it readable and responsive from the sofa: a larger, adjustable interface, a clear focus highlight, faster navigation, and a much richer Now Playing screen. See [CHANGELOG-3.9 to 3.11.md](CHANGELOG-3.9%20to%203.11.md) for what changed. **Version 3.12** brings in the community's contributions — Opus playback, more ways to sort, fuller Home rows and popular songs on artist pages: see [CHANGELOG-3.12.md](CHANGELOG-3.12.md) and [Contributors](#contributors).
 
 ## Features
 
 ### Library and browsing
 - **Full library browsing** — albums, artists, songs, genres, and playlists
-- **Albums sort and filter** — sort by name, artist, recently added, year or most played; filter by genre; album counts in the header
+- **Albums sort and filter** — sort by name, artist, recently added, year, most played or at random; filter by genre; album counts in the header
+- **Artists sort** — by name, by most albums, or at random
 - **The complete Songs list** — pages through your whole library, with a "Shuffle all" button
 - **Playlist covers** — playlists show their cover art (Navidrome's collage) in the grid and on Home
-- **Home screen rows** — Recently Added, Recently Played, Your Favourites, Most Played, Your Playlists and Rediscover
+- **Home screen rows** — Recently Added, Recently Played, Your Favourites, Most Played, Your Playlists and Rediscover; 6, 9 or 12 albums a row
 - **Multiple Library Support** — supports Navidrome's multiple libraries per server (select in Settings)
-- **Artist detail pages** — discography, biography (via Last.fm), and similar artists
+- **Artist detail pages** — discography, popular songs, biography (via Last.fm), and similar artists
 - **Artist on every track row** — album, playlist, queue, songs, genre and search lists all show the artist
 - **Search** — on-screen keyboard with instant results across artists, albums, and songs
 - **Fast with big libraries** — grids and long lists only draw what is on screen, so 14,000-song lists stay responsive
@@ -49,6 +50,8 @@ This is Version 3 of Sonance — a UI rewrite with a completely new hardware-acc
 - **Near-gapless playback** — pre-buffers the next track for seamless album listening
 - **Queue management** — add to queue, play next, and remove tracks using the remote's colour buttons
 - **AVPlay backend** — uses Samsung's native audio engine for hardware-decoded FLAC, AAC, MP3, and more
+- **Opus** — Opus files play through your server, converted to MP3 as they stream; seeking works too
+- **Says why** — a track that cannot be played shows its name and whether its format is not supported or it could not be loaded
 
 ### Home-row icon
 - **Square or wide tile** — `Sonance3.wgt` has a square launcher icon; `Sonance3-Oblong.wgt` shows a wide 16:9 tile on the TV's home row. Same app, so install either one.
@@ -147,6 +150,7 @@ Open Settings from the ⚙ icon at the right of the top menu:
   - **Accent Colour** — choose from 8 colour themes (pink, red, orange, amber, green, teal, blue, purple), or reset to default
   - **Interface size** — 100 %, 125 %, 150 % (default), 175 % or 200 %; changes apply immediately
   - **Background** — Solid (default) or Gradient
+  - **Albums per Home row** — Standard (6, default), 9 or 12
   - **Up next on Now Playing** — Show (default) or Hide; hidden, Now Playing shows a larger cover with the sleep timer under the controls
 - **Playback**
   - **Auto Now Playing** — automatically navigate to the Now Playing screen when a song starts (default: on)
@@ -280,6 +284,13 @@ This app targets Samsung TVs from 2019, which run Chromium 63. Key limitations t
 
 GNU GPL v3. You are free to use this however you want as long as it stays free and open-source. You cannot commercialise this or close source any version of it. 
 
+
+## Contributors
+
+Thank you to everyone who has sent a pull request:
+
+- **David BELEY** ([@dbeley](https://github.com/dbeley)) — the NixOS dev shell ([#1](https://github.com/MrSimmo/sonance3/pull/1)); Opus playback, the random album sort, the Artists sort, the Home row size, popular songs on artist pages, playback error messages and the artist page fix, first built in [#2](https://github.com/MrSimmo/sonance3/pull/2) and brought into 3.12
+- **Anupam Mediratta** ([@anupamme](https://github.com/anupamme)) — input validation in the test helpers ([#5](https://github.com/MrSimmo/sonance3/pull/5))
 
 ## Acknowledgements
 
