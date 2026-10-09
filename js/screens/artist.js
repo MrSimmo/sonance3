@@ -15,6 +15,7 @@ var ArtistScreen = (function() {
     var SVG_PATHS = SonanceUtils.SVG_PATHS;
 
     var MAX_PLAY_ALL_ALBUMS = 10;
+    var POPULAR_COUNT = 10;     // v3.12 R5: the most songs Popular shows
 
     var _container = null;
     var _artistId = null;
@@ -23,6 +24,7 @@ var ArtistScreen = (function() {
     var _active = false;
     var _loadingPlayAll = false;
     var _stage3Raf = null; // V3-6-fix2 PERF-6: rAF id for deferred discography
+    var _popular = null;   // v3.12 R5: the Popular section's songs, in its order
 
     // v3.12 R7 (D170): Artist -> similar Artist keeps the outgoing Artist page
     // in the DOM as a ghost for the zoom, before the new page and with the
@@ -160,6 +162,22 @@ var ArtistScreen = (function() {
                 }
             });
 
+            // v3.12 R5 (D180): STAGE 4 — Popular, between the discography and
+            // the biography, when the server has top songs for the artist
+            // (Navidrome asks Last.fm, so none is normal). Never steals focus;
+            // an empty answer or an error shows nothing.
+            api.getTopSongs(artist.name || '', POPULAR_COUNT).then(function(songs) {
+                if (!_isCurrentPage(page) || !songs || !songs.length) return;
+                _popular = songs.slice(0, POPULAR_COUNT);
+                var stub = page.querySelector('#artist-popular-stub');
+                if (!stub) return;
+                stub.textContent = '';
+                stub.appendChild(_renderPopular(_popular));
+                _registerArtistContentZones(false);
+            }).catch(function(err) {
+                log('Artist', 'getTopSongs failed: ' + err.message);
+            });
+
             // STAGE 2 — bio + similar. Fills in once getArtistInfo2
             // resolves; never steals focus.
             infoPromise.then(function(info) {
@@ -247,6 +265,7 @@ var ArtistScreen = (function() {
         // --- RIGHT PANEL — stubs for stages 2 & 3 ---
         var rightPanel = el('div', { className: 'artist-detail-right' });
         rightPanel.appendChild(el('div', { id: 'artist-discography-stub' }));
+        rightPanel.appendChild(el('div', { id: 'artist-popular-stub' }));
         rightPanel.appendChild(el('div', { id: 'artist-bio-stub' }));
         rightPanel.appendChild(el('div', { id: 'artist-similar-stub' }));
 
@@ -384,6 +403,57 @@ var ArtistScreen = (function() {
 
         section.appendChild(list);
         return section;
+    }
+
+    // --- Popular section (v3.12 R5) ---
+    // The v4 track rows: number, title with the album under it, star (shown
+    // when starred or focused), duration. A click plays as Enter does.
+    function _renderPopular(songs) {
+        var section = el('div', { className: 'artist-section artist-section-popular' });
+        section.appendChild(el('div', { className: 'artist-section-label' }, 'POPULAR'));
+        var list = el('div', { className: 'artist-popular-list', id: 'artist-popular-list' });
+        songs.forEach(function(song, index) {
+            var row = el('div', {
+                className: 'track-row focusable',
+                'data-track-index': String(index),
+                'data-song-id': song.id
+            });
+            row.appendChild(el('div', { className: 'track-row-number' }, String(index + 1)));
+            var info = el('div', { className: 'track-row-info' });
+            info.appendChild(el('div', { className: 'track-row-title' }, song.title || 'Unknown'));
+            info.appendChild(el('div', { className: 'track-row-album' }, song.album || ''));
+            row.appendChild(info);
+            var star = el('div', { className: 'track-row-star' });
+            _paintStar(star, StarredCache.isSongStarred(song.id));
+            row.appendChild(star);
+            row.appendChild(el('div', { className: 'track-row-duration' },
+                song._formattedDuration || SonanceUtils.formatDuration(song.duration)));
+            list.appendChild(row);
+        });
+        list.addEventListener('click', function(ev) {
+            var r = ev.target.closest('.track-row');
+            if (r) _playPopular(parseInt(r.getAttribute('data-track-index'), 10));
+        });
+        section.appendChild(list);
+        return section;
+    }
+
+    function _paintStar(box, filled) {
+        if (!box) return;
+        box.textContent = '';
+        var icon = SonanceUtils.createStarSvg(filled);
+        icon.style.width = rem(14);
+        icon.style.height = rem(14);
+        box.appendChild(icon);
+        if (filled) box.classList.add('is-starred');
+        else box.classList.remove('is-starred');
+    }
+
+    // Enter on Popular row idx: the ten, from that one.
+    function _playPopular(idx) {
+        if (!_popular || isNaN(idx) || !_popular[idx]) return;
+        Player.setQueue(_popular, idx);
+        log('Artist', 'Play popular song ' + (idx + 1));
     }
 
     // --- Biography section ---
@@ -582,9 +652,13 @@ var ArtistScreen = (function() {
     function _registerArtistContentZones(setInitialFocus) {
         if (!_container) return;
         var albumElements = _container.querySelectorAll('#artist-albums-list .focusable');
+        var popularElements = _container.querySelectorAll('#artist-popular-list .focusable');
         var similarElements = _container.querySelectorAll('#artist-similar-row .focusable');
         var hasAlbums = albumElements.length > 0;
+        var hasPopular = popularElements.length > 0;   // v3.12 R5
         var hasSimilar = similarElements.length > 0;
+        // The right column top to bottom: albums, Popular, similar artists.
+        var firstRight = hasAlbums ? 'artist-albums' : (hasPopular ? 'artist-popular' : (hasSimilar ? 'artist-similar' : null));
 
         // Re-register left panel with correct neighbours now that we know
         // which right-panel zones exist.
@@ -596,8 +670,8 @@ var ArtistScreen = (function() {
             onFocus: _revealInColumn,
             neighbors: {
                 left: 'topnav',
-                right: hasAlbums ? 'artist-albums' : (hasSimilar ? 'artist-similar' : null),
-                down: hasAlbums ? 'artist-albums' : (hasSimilar ? 'artist-similar' : 'nowplaying-bar')
+                right: firstRight,
+                down: firstRight || 'nowplaying-bar'
             }
         });
 
@@ -617,6 +691,40 @@ var ArtistScreen = (function() {
                 neighbors: {
                     left: 'content',
                     up: 'topnav',
+                    down: hasPopular ? 'artist-popular' : (hasSimilar ? 'artist-similar' : 'nowplaying-bar')
+                }
+            });
+        }
+
+        // v3.12 R5: the Popular rows. Enter plays the ten from the row; hold
+        // OK opens the options sheet (A5), whose Favourite repaints the star.
+        if (hasPopular) {
+            FocusManager.registerZone('artist-popular', {
+                selector: PAGE + '#artist-popular-list .focusable',
+                columns: 1,
+                onActivate: function(idx) {
+                    if (typeof App !== 'undefined' && App.saveCurrentFocus) {
+                        App.saveCurrentFocus();
+                    }
+                    _playPopular(idx);
+                },
+                onLongPress: function(idx) {
+                    var song = _popular && _popular[idx];
+                    if (!song) return;
+                    OptionsSheet.open({
+                        song: song,
+                        onStar: function(nowStarred) {
+                            _paintStar(_container && _container.querySelector(
+                                '#artist-popular-list .track-row[data-song-id="' + song.id + '"] .track-row-star'), nowStarred);
+                        }
+                    });
+                },
+                onFocus: function(idx, element) {
+                    _scrollToFocused(_rightColumn(), element);
+                },
+                neighbors: {
+                    left: 'content',
+                    up: hasAlbums ? 'artist-albums' : 'topnav',
                     down: hasSimilar ? 'artist-similar' : 'nowplaying-bar'
                 }
             });
@@ -631,14 +739,15 @@ var ArtistScreen = (function() {
                     _scrollToFocused(_rightColumn(), element);
                 },
                 neighbors: {
-                    left: hasAlbums ? null : 'content',
-                    up: hasAlbums ? 'artist-albums' : 'topnav',
+                    left: (hasAlbums || hasPopular) ? null : 'content',
+                    up: hasPopular ? 'artist-popular' : (hasAlbums ? 'artist-albums' : 'topnav'),
                     down: 'nowplaying-bar'
                 }
             });
         }
 
-        App.registerNowPlayingBarZone(hasSimilar ? 'artist-similar' : (hasAlbums ? 'artist-albums' : 'content'));
+        App.registerNowPlayingBarZone(hasSimilar ? 'artist-similar'
+            : (hasPopular ? 'artist-popular' : (hasAlbums ? 'artist-albums' : 'content')));
 
         App.hideColourHints();
 
@@ -682,6 +791,7 @@ var ArtistScreen = (function() {
         _artistId = null;
         _artistData = null;
         _artistInfo = null;
+        _popular = null;
         _loadingPlayAll = false;
     }
 

@@ -1007,6 +1007,16 @@ var SubsonicAPI = (function() {
         });
     };
 
+    // --- Top songs (v3.12 R5) ---
+    // An artist's most played songs, by artist name. Navidrome fills it from
+    // its Last.fm agent, so an empty answer is normal (D180).
+    SubsonicAPI.prototype.getTopSongs = function(artistName, count) {
+        return this._cachedRequest('getTopSongs.view', { artist: artistName, count: count || 10 }).then(function(data) {
+            var list = data && data.topSongs;
+            return _memoSongList(_ensureArray(list && list.song));
+        });
+    };
+
     // --- OpenSubsonic extensions (v3.10 A8) ---
     // Resolves to the extension names the server advertises ([] on a plain
     // Subsonic server, which answers this endpoint with an error). Asked once

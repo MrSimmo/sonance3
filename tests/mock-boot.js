@@ -89,6 +89,8 @@
     var ARTIST_INFO = /[?&]mockArtistInfo=1/.test(window.location.search);
     var ARTIST_INFO_DELAY = _numParam('mockArtistInfoDelay', 0);
     var ARTIST_INFO_DELAY_ID = (/[?&]mockArtistInfoDelayId=([^&]*)/.exec(window.location.search) || [])[1] || null;
+    // v3.12 R5: `?mockTopSongsFail=1` answers getTopSongs with an error.
+    var TOP_SONGS_FAIL = /[?&]mockTopSongsFail=1/.test(window.location.search);
 
     // WHY zero-padded ordinals: byte-order string sort must equal fixture
     // order. `SubsonicAPI._mergeAlbumLists` sorts merged pages by `name`, so
@@ -644,6 +646,22 @@
                 return resp({ similarSongs2: { song: simSongs } });
             });
         }
+        // v3.12 R5: getTopSongs, by artist name. An even-indexed artist that
+        // owns an album gets that album's tracks (up to `count`); the others
+        // none, as on a server whose Last.fm agent knows nothing of them.
+        if (/getTopSongs/.test(u)) {
+            if (TOP_SONGS_FAIL) return resp({ status: 'failed', error: { code: 0, message: 'Agent unavailable' } });
+            var topArtist = null;
+            for (var ta = 0; ta < mockArtists.length; ta++) {
+                if (mockArtists[ta].name === q.artist) { topArtist = mockArtists[ta]; break; }
+            }
+            var topIdx = topArtist ? parseInt(topArtist.id.replace('artist-', ''), 10) : -1;
+            var topOwned = (topArtist && topIdx % 2 === 0)
+                ? mockAlbums.filter(function(al) { return al.artistId === topArtist.id; }) : [];
+            var top = topOwned.length ? _songsForAlbum(topOwned[0]).slice(0, _intParam(q, 'count', 50)) : [];
+            return resp({ topSongs: top.length ? { song: top } : {} });
+        }
+
         if (/getArtistInfo2/.test(u)) {
             if (!ARTIST_INFO) return resp({ artistInfo2: {} });
             var infoIdx = Math.max(0, parseInt(String(q.id || '').replace('artist-', ''), 10) || 0) % mockArtists.length;

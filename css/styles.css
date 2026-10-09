@@ -3088,7 +3088,8 @@ html.backdrop-gradient .np-screen {
     font-weight: 600;
 }
 
-.track-row.focused .track-row-artist {
+.track-row.focused .track-row-artist,
+.track-row.focused .track-row-album {
     color: var(--focus-ink-soft);
 }
 
@@ -3134,7 +3135,9 @@ html.backdrop-gradient .np-screen {
     text-overflow: ellipsis;
 }
 
-.track-row-artist {
+/* v3.12 R5: the Artist screen's Popular rows show the album there. */
+.track-row-artist,
+.track-row-album {
     font-size: 1.3rem;
     color: var(--text-secondary);
     white-space: nowrap;

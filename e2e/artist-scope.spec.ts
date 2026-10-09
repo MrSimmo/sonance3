@@ -37,6 +37,8 @@ const livePage = (page: Page) => page.evaluate(() => {
     bio: bio ? bio.textContent : null,
     similar: Array.prototype.map.call(cur.querySelectorAll('#artist-similar-row .artist-similar-card'),
       (c: HTMLElement) => c.getAttribute('data-artist-id')),
+    // v3.12 R5: the Popular rows (the mock gives even-indexed artists ten).
+    popular: cur.querySelectorAll('#artist-popular-list .track-row').length,
     focusZone: FocusManager.getActiveZone(),
     focusOnLivePage: !!(f && cur.contains(f)),
   };
@@ -53,6 +55,7 @@ const expected = (page: Page, id: string) => page.evaluate((artistId) => {
     albums: M.albums.filter((al: any) => al.artistId === artistId).map((al: any) => al.id),
     bio: 'Biography of ' + a.name + '.',
     similar: [1, 2, 3].map((d) => M.artists[(k + d) % M.artists.length].id),
+    popular: k % 2 === 0 ? 10 : 0,
   };
 }, id);
 
@@ -65,8 +68,9 @@ test('R7 Artist -> similar Artist: the new page gets its own sections and the fo
   const first = await livePage(page);
   expect(first).toMatchObject(await expected(page, 'artist-0'));
 
-  // Down from the discography to the similar artists, then Enter.
-  for (let i = 0; i < 10 && (await H.focus(page)).zone !== 'artist-similar'; i++) await H.press(page, 'ArrowDown', 1, 80);
+  // Down from the discography (and Popular, v3.12 R5) to the similar
+  // artists, then Enter.
+  for (let i = 0; i < 20 && (await H.focus(page)).zone !== 'artist-similar'; i++) await H.press(page, 'ArrowDown', 1, 80);
   expect((await H.focus(page)).zone).toBe('artist-similar');
   const target = await page.evaluate(() => FocusManager.getCurrentFocused()!.getAttribute('data-artist-id'));
   expect(target).toBe('artist-1');

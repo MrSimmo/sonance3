@@ -639,3 +639,26 @@ acceptance was read. Never edit the text above silently.
   skeletons; rows of 12, Right to the 12th with the row scrolled and the
   focus unclipped at 150 %. Home, focus-path, NP-bar, prefetch, focus-style,
   scale, backdrop, Up Next, overlay, smooth-scroll and smoke specs 94 passed.
+- **D180 — Popular songs (R5).** `SubsonicAPI.getTopSongs(name, count)`:
+  `getTopSongs.view?artist=<name>&count=10`, a cached read with the usual
+  10 s timeout (a failure is not cached). Asked once `getArtist` has given
+  the name; rendered into a stub between the discography and the
+  biography (so the order holds whichever answer lands first), only when
+  it returns a song, and only on the page that asked (D170). Rows are
+  `.track-row`s: number, title, the album under it (`.track-row-album`,
+  which joins the artist line's two CSS rules; no new values), star,
+  duration. Zone `artist-popular`: albums → Popular → similar artists → the
+  NP bar (the bar's Up goes to the last present), Left to the left panel,
+  Enter plays the ten from the row (`saveCurrentFocus` first), hold OK opens
+  the options sheet (its Favourite repaints the row's star). The R7 spec's
+  walk to the similar artists now passes Popular (its press cap raised to
+  20) and checks Popular lands on the live page. Acceptance:
+  `e2e/artist-popular.spec.ts` RED (no section), then 3 passed (the
+  empty/error case is a guard, passing on 3.11 too): the request, the
+  section order, ten rows, the down-walk through rows 0–9 in order, Up from
+  the similar artists to row 9, Left to the panel, Enter queues the ten from
+  row 4, hold OK opens the sheet on "Track 05" without playing, Back returns
+  to row 5. Artist-adjacent and focus-path specs 103 passed plus the R7
+  fix-up. **Live (read-only, count 10):** Deadmau5 10 (764 ms), Various
+  Artists 0, Ludwig Van Beethoven 0, "00.db" 0 — the server's Last.fm agent
+  answers for some artists.
