@@ -109,6 +109,8 @@ The build minifies the JavaScript into two bundles (`js/sonance-core.min.js`, `j
 
 `./build.sh --dev` switches `index.html` back to the individual source files for browser debugging; run `./build.sh` again before packaging.
 
+If you are using Nix, you can make use of the provided `shell.nix` with `nix-shell` to have a shell environment with the needed dependencies.
+
 ## Setup
 
 1. Launch Sonance on your TV
