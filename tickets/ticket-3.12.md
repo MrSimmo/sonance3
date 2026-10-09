@@ -491,3 +491,40 @@ artists empty.
 
 Sessions append here, newest last: each change, its D-number, and how
 acceptance was read. Never edit the text above silently.
+
+### v3.12 session (2026-10-09)
+
+- **D167 — The ticket and prompt committed at T0.** They were untracked;
+  committed (53f5ca0) so this section's amendments are tracked. T0
+  "before": the whole suite at 150 %, 231 passed (15.7 m), exit 0; the
+  100 % visual baseline (19 states) and Home's five `getAlbumList2` URLs
+  (all `size=6`) were captured from the 3.11 code.
+- **D168 — PR #5's head moved after planning (R8).** Its head is now
+  7333063 ("Address review feedback"), which rebuilds `Sonance3.wgt` and
+  `Sonance3-Oblong.wgt`. Unzipped, both hold byte-identical files to
+  ca4e38e's (only zip timestamps differ), so the whole head is merged (merge
+  7c05958) and GitHub marks the PR merged on push; T11 rebuilds both
+  packages anyway. Acceptance: ca4e38e is reachable; `backdrop` and
+  `np-focus-mode` 16 passed.
+- **D169 — shell.nix lists perl and gzip (R9).** PR #1 merged (f3429ee;
+  README: main's text in the two whitespace-only conflicts, PR #1's
+  sentence in the build section). The audit of what `build.sh` runs:
+  coreutils (basename cp cut dirname du head mkdir mktemp rm wc), gnugrep,
+  gawk, gzip, perl, zip, unzip, nodejs (npx: terser, clean-css-cli), bash
+  (mkShell). `perl` was missing; `gzip` comes with mkShell's stdenv and is
+  listed so `shell.nix` alone shows the set. `bash -n build.sh` exit 0, and
+  a build exit 0 (bundles byte-identical, packages identical when
+  unzipped). Nix is not installed here: @dbeley is asked to confirm.
+- **D170 — R7 reproduced; Artist lookups scoped to their page.** RED
+  (`e2e/artist-scope.spec.ts`, mock opt-in `mockArtistInfo=1`): after
+  Artist → similar Artist the live page had no discography, biography or
+  similar artists (all written into the outgoing ghost); and an answer for
+  a left Artist page (held 1.5 s) overwrote the next Artist page's
+  biography and similar artists. Fix: every lookup goes through the page
+  the activation rendered into, answers for a replaced page are dropped
+  (D88's rule), and the zone selectors are prefixed `#page-current ` because
+  FocusManager caches a zone's `querySelectorAll` when it registers (a zone
+  registered mid-zoom held the ghost's rows first). Two of the 13 listed
+  lookups (`#content-area`, :94 and :654) resolve nothing: that element no
+  longer exists (css :2895); left as they are. GREEN: 2 passed; the
+  artist-related and focus-path specs 101 passed.

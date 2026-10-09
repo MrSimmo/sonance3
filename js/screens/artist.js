@@ -24,6 +24,19 @@ var ArtistScreen = (function() {
     var _loadingPlayAll = false;
     var _stage3Raf = null; // V3-6-fix2 PERF-6: rAF id for deferred discography
 
+    // v3.12 R7 (D170): Artist -> similar Artist keeps the outgoing Artist page
+    // in the DOM as a ghost for the zoom, before the new page and with the
+    // same ids, and the new page's answers land inside the transition. So
+    // every lookup is scoped to the page this activation rendered into, and
+    // the zone selectors to #page-current (the ghost has lost that id);
+    // FocusManager caches a zone's querySelectorAll when it registers. An
+    // answer for a page that has since been replaced is dropped (D88).
+    var PAGE = '#page-current ';
+
+    function _isCurrentPage(page) {
+        return _active && !!page && _container === page;
+    }
+
     // =========================================
     //  Manual scroll-into-view (Chromium 63 safe)
     // =========================================
@@ -39,6 +52,10 @@ var ArtistScreen = (function() {
         } else if (elTop < viewTop) {
             container.scrollTop = elTop - SonanceUtils.px(20);
         }
+    }
+
+    function _rightColumn() {
+        return _container ? _container.querySelector('.artist-detail-right') : null;
     }
 
     // =========================================
@@ -114,8 +131,9 @@ var ArtistScreen = (function() {
             return null;
         });
 
+        var page = _container;
         api.getArtist(_artistId).then(function(artist) {
-            if (!_active) return;
+            if (!_isCurrentPage(page)) return;
             if (!artist) { _renderError('Artist not found.'); return; }
             _artistData = artist;
 
@@ -129,14 +147,14 @@ var ArtistScreen = (function() {
             if (_stage3Raf !== null) cancelAnimationFrame(_stage3Raf);
             _stage3Raf = requestAnimationFrame(function() {
                 _stage3Raf = null;
-                if (!_active) return;
-                _renderStage3Discography(artist, api);
+                if (!_isCurrentPage(page)) return;
+                _renderStage3Discography(page, artist, api);
                 _registerArtistContentZones(false);
                 // V3-6-fix3 NAV-3: focus the top of the discography list
                 // instead of the left action panel. NAV-1 snapshot restore
                 // (async poll @50ms) still overrides to the saved index when
                 // the user is backing in from album detail.
-                var firstAlbum = document.querySelector('#artist-albums-list .focusable');
+                var firstAlbum = page.querySelector('#artist-albums-list .focusable');
                 if (firstAlbum && FocusManager.getActiveZone() !== 'artist-albums') {
                     FocusManager.setActiveZone('artist-albums', 0, true);
                 }
@@ -145,15 +163,16 @@ var ArtistScreen = (function() {
             // STAGE 2 — bio + similar. Fills in once getArtistInfo2
             // resolves; never steals focus.
             infoPromise.then(function(info) {
-                if (!_active) return;
+                if (!_isCurrentPage(page)) return;
                 _artistInfo = info;
-                _renderStage2BioAndSimilar(artist, info, api);
+                _renderStage2BioAndSimilar(page, artist, info, api);
                 _registerArtistContentZones(false);
             });
 
             log('Artist', 'Stage 1 rendered: ' + (artist.name || 'Unknown') +
                 ' (' + ((artist.album && artist.album.length) || 0) + ' albums)');
         }).catch(function(err) {
+            if (!_isCurrentPage(page)) return;
             log('Artist', 'Error loading artist: ' + err.message);
             _renderError('Unable to load artist.');
         });
@@ -237,12 +256,12 @@ var ArtistScreen = (function() {
         _container.appendChild(wrapper);
     }
 
-    function _renderStage2BioAndSimilar(artist, info, api) {
+    function _renderStage2BioAndSimilar(page, artist, info, api) {
         // Re-render hero photo if Last.fm provided one (swap in place).
         if (info) {
             var imageUrl = info.largeImageUrl || info.mediumImageUrl || info.smallImageUrl || null;
             if (imageUrl) {
-                var oldWrap = document.getElementById('artist-photo-wrap');
+                var oldWrap = page.querySelector('#artist-photo-wrap');
                 if (oldWrap && oldWrap.parentNode) {
                     var newWrap = _renderArtistPhoto(artist, info, api);
                     newWrap.id = 'artist-photo-wrap';
@@ -251,14 +270,14 @@ var ArtistScreen = (function() {
             }
         }
 
-        var bioStub = document.getElementById('artist-bio-stub');
+        var bioStub = page.querySelector('#artist-bio-stub');
         if (bioStub) {
             bioStub.textContent = '';
             var bio = _renderBiography(info);
             if (bio) bioStub.appendChild(bio);
         }
 
-        var similarStub = document.getElementById('artist-similar-stub');
+        var similarStub = page.querySelector('#artist-similar-stub');
         if (similarStub) {
             similarStub.textContent = '';
             var similar = _renderSimilarArtists(info, api);
@@ -266,8 +285,8 @@ var ArtistScreen = (function() {
         }
     }
 
-    function _renderStage3Discography(artist, api) {
-        var stub = document.getElementById('artist-discography-stub');
+    function _renderStage3Discography(page, artist, api) {
+        var stub = page.querySelector('#artist-discography-stub');
         if (!stub) return;
         stub.textContent = '';
         stub.appendChild(_renderDiscography(artist, api));
@@ -432,8 +451,9 @@ var ArtistScreen = (function() {
     // =========================================
 
     function _setPlayAllLoading(isLoading) {
-        var playBtn = document.getElementById('artist-play-all-btn');
-        var shuffleBtn = document.getElementById('artist-shuffle-all-btn');
+        if (!_container) return;
+        var playBtn = _container.querySelector('#artist-play-all-btn');
+        var shuffleBtn = _container.querySelector('#artist-shuffle-all-btn');
         if (isLoading) {
             if (playBtn) { playBtn.textContent = 'Loading...'; playBtn.disabled = true; }
             if (shuffleBtn) { shuffleBtn.textContent = 'Loading...'; shuffleBtn.disabled = true; }
@@ -530,7 +550,7 @@ var ArtistScreen = (function() {
         // a stage 2/3 zone arrives we re-register with the correct
         // pointers, but we never reset focus.
         FocusManager.registerZone('content', {
-            selector: '.artist-detail-left .focusable',
+            selector: PAGE + '.artist-detail-left .focusable',
             columns: 1,
             onActivate: function(idx, element) { element.click(); },
             // v3.10 D84 (D108): the column scrolls at 175-200 %.
@@ -560,15 +580,16 @@ var ArtistScreen = (function() {
     }
 
     function _registerArtistContentZones(setInitialFocus) {
-        var albumElements = document.querySelectorAll('#artist-albums-list .focusable');
-        var similarElements = document.querySelectorAll('#artist-similar-row .focusable');
+        if (!_container) return;
+        var albumElements = _container.querySelectorAll('#artist-albums-list .focusable');
+        var similarElements = _container.querySelectorAll('#artist-similar-row .focusable');
         var hasAlbums = albumElements.length > 0;
         var hasSimilar = similarElements.length > 0;
 
         // Re-register left panel with correct neighbours now that we know
         // which right-panel zones exist.
         FocusManager.registerZone('content', {
-            selector: '.artist-detail-left .focusable',
+            selector: PAGE + '.artist-detail-left .focusable',
             columns: 1,
             onActivate: function(idx, element) { element.click(); },
             // v3.10 D84 (D108): the column scrolls at 175-200 %.
@@ -582,7 +603,7 @@ var ArtistScreen = (function() {
 
         if (hasAlbums) {
             FocusManager.registerZone('artist-albums', {
-                selector: '#artist-albums-list .focusable',
+                selector: PAGE + '#artist-albums-list .focusable',
                 columns: 1,
                 onActivate: function(idx, element) {
                     if (typeof App !== 'undefined' && App.saveCurrentFocus) {
@@ -591,8 +612,7 @@ var ArtistScreen = (function() {
                     element.click();
                 },
                 onFocus: function(idx, element) {
-                    var container = document.querySelector('.artist-detail-right');
-                    _scrollToFocused(container, element);
+                    _scrollToFocused(_rightColumn(), element);
                 },
                 neighbors: {
                     left: 'content',
@@ -604,12 +624,11 @@ var ArtistScreen = (function() {
 
         if (hasSimilar) {
             FocusManager.registerZone('artist-similar', {
-                selector: '#artist-similar-row .focusable',
+                selector: PAGE + '#artist-similar-row .focusable',
                 columns: similarElements.length,
                 onActivate: function(idx, element) { element.click(); },
                 onFocus: function(idx, element) {
-                    var container = document.querySelector('.artist-detail-right');
-                    _scrollToFocused(container, element);
+                    _scrollToFocused(_rightColumn(), element);
                 },
                 neighbors: {
                     left: hasAlbums ? null : 'content',

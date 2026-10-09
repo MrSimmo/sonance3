@@ -80,6 +80,16 @@
     var SIMILAR_DELAY = _numParam('mockSimilarDelay', 0);
     var similarFailsLeft = _numParam('mockSimilarFail', 0);
 
+    // v3.12 R7 opt-in. `?mockArtistInfo=1` answers getArtistInfo2 with a
+    // biography and three similar artists (the next three in the fixtures),
+    // so Artist -> similar Artist can be driven here; off, the answer stays
+    // empty, as every earlier Artist screen capture has it.
+    // `?mockArtistInfoDelay=N&mockArtistInfoDelayId=artist-K` holds that one
+    // artist's answer N ms (an answer landing after its page was left).
+    var ARTIST_INFO = /[?&]mockArtistInfo=1/.test(window.location.search);
+    var ARTIST_INFO_DELAY = _numParam('mockArtistInfoDelay', 0);
+    var ARTIST_INFO_DELAY_ID = (/[?&]mockArtistInfoDelayId=([^&]*)/.exec(window.location.search) || [])[1] || null;
+
     // WHY zero-padded ordinals: byte-order string sort must equal fixture
     // order. `SubsonicAPI._mergeAlbumLists` sorts merged pages by `name`, so
     // unpadded numbering ("Album 2" > "Album 10") would reorder pages against
@@ -623,7 +633,19 @@
                 return resp({ similarSongs2: { song: simSongs } });
             });
         }
-        if (/getArtistInfo2/.test(u)) return resp({ artistInfo2: {} });
+        if (/getArtistInfo2/.test(u)) {
+            if (!ARTIST_INFO) return resp({ artistInfo2: {} });
+            var infoIdx = Math.max(0, parseInt(String(q.id || '').replace('artist-', ''), 10) || 0) % mockArtists.length;
+            var infoBody = { artistInfo2: {
+                biography: 'Biography of ' + mockArtists[infoIdx].name + '.',
+                similarArtist: [1, 2, 3].map(function(d) {
+                    var sim = mockArtists[(infoIdx + d) % mockArtists.length];
+                    return { id: sim.id, name: sim.name, coverArt: sim.coverArt, albumCount: sim.albumCount };
+                })
+            } };
+            if (!ARTIST_INFO_DELAY || (ARTIST_INFO_DELAY_ID && q.id !== ARTIST_INFO_DELAY_ID)) return resp(infoBody);
+            return new Promise(function(resolve) { setTimeout(resolve, ARTIST_INFO_DELAY); }).then(function() { return resp(infoBody); });
+        }
 
         if (/getMusicFolders/.test(u)) {
             // A single library is reported as one folder; Settings hides the
