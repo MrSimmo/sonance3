@@ -132,7 +132,10 @@ var PlaylistsScreen = (function() {
 
         if (_playlists.length === 0) {
             _container.appendChild(wrapper);
-            _renderEmpty('No playlists found. Create playlists in your Navidrome server.');
+            // v3.13 R11 (user decision 1): the server the user has.
+            _renderEmpty(AuthManager.getBackend() === 'jellyfin'
+                ? 'No playlists found. Create playlists in your Jellyfin server.'
+                : 'No playlists found. Create playlists in your Navidrome server.');
             return;
         }
 

@@ -64,7 +64,10 @@ var SettingsScreen = (function() {
         // Server URL row
         _addInfoRow(serverSection, 'Server URL', serverUrl);
         _addInfoRow(serverSection, 'Username', username);
-        _addInfoRow(serverSection, 'API Version', 'Subsonic 1.16.1');
+        // v3.13 R11 (user decision 1): Jellyfin's version, stored at sign-in
+        // and refreshed by each ping, so the row renders at once.
+        _addInfoRow(serverSection, 'API Version', AuthManager.getBackend() === 'jellyfin'
+            ? 'Jellyfin ' + AuthManager.getServerVersion() : 'Subsonic 1.16.1');
 
         // Fetch library stats from API
         var api = App.getApi();
