@@ -496,3 +496,127 @@ test.describe('R10 library scope on unscoped results', () => {
     }
   });
 });
+
+// --- R6: media URLs ---------------------------------------------------------
+
+test.describe('R6 media URLs', () => {
+  test('streams carry ApiKey; a transcode is stream.mp3 with startTimeTicks only above 0; stable', async ({ page }) => {
+    await page0(page);
+    await api(page);
+    const r = await page.evaluate(() => {
+      const a = (window as any).__jf;
+      return {
+        origin: window.location.origin,
+        plain: a.getStreamUrl('song-1'), again: a.getStreamUrl('song-1'),
+        mp3: a.getStreamUrl('song-4', { format: 'mp3', maxBitRate: 320, timeOffset: 0 }),
+        seek: a.getStreamUrl('song-4', { format: 'mp3', maxBitRate: 320, timeOffset: 90 })
+      };
+    });
+    expect(r.plain).toBe(r.origin + '/Audio/song-1/stream?static=true&ApiKey=mock-jf-token-seed');
+    expect(r.again).toBe(r.plain);
+    expect(r.mp3).toBe(r.origin + '/Audio/song-4/stream.mp3?audioCodec=mp3&audioBitRate=320000&ApiKey=mock-jf-token-seed');
+    expect(r.seek).toBe(r.origin + '/Audio/song-4/stream.mp3?audioCodec=mp3&audioBitRate=320000&startTimeTicks=900000000&ApiKey=mock-jf-token-seed');
+  });
+
+  test('covers: no token, the tag when known, ar- stripped, Jpg, stable; they load', async ({ page }) => {
+    await page0(page);
+    await api(page);
+    const r = await page.evaluate(async () => {
+      const a = (window as any).__jf;
+      const load = (src: string) => new Promise((res) => {
+        const img = new Image();
+        img.onload = () => res(img.naturalWidth + 'x' + img.naturalHeight);
+        img.onerror = () => res('error');
+        img.src = src;
+      });
+      const tagged = a.getCoverArtUrl('album-3~0123abcd', 300);
+      return {
+        origin: window.location.origin,
+        tagged, again: a.getCoverArtUrl('album-3~0123abcd', 300),
+        bare: a.getCoverArtUrl('album-5', 150),
+        artist: a.getCoverArtUrl('ar-artist-2', 200),
+        nosize: a.getCoverArtUrl('pl-1~ff'),
+        loaded: await load(tagged)
+      };
+    });
+    expect(r.tagged).toBe(r.origin + '/Items/album-3/Images/Primary?maxWidth=300&maxHeight=300&quality=90&format=Jpg&tag=0123abcd');
+    expect(r.again).toBe(r.tagged);
+    expect(r.bare).toBe(r.origin + '/Items/album-5/Images/Primary?maxWidth=150&maxHeight=150&quality=90&format=Jpg');
+    expect(r.artist).toBe(r.origin + '/Items/artist-2/Images/Primary?maxWidth=200&maxHeight=200&quality=90&format=Jpg');
+    expect(r.nosize).toBe(r.origin + '/Items/pl-1/Images/Primary?quality=90&format=Jpg&tag=ff');
+    for (const u of [r.tagged, r.bare, r.artist, r.nosize]) expect(u).not.toMatch(/ApiKey|Token|api_key/i);
+    expect(r.loaded).toBe('300x300');
+  });
+
+  test('a song\'s cover is its album\'s image, with the album\'s tag', async ({ page }) => {
+    await page0(page);
+    await api(page);
+    const c = await page.evaluate(() => (window as any).__jf.getAlbum('album-2').then((al: any) => [al.coverArt, al.song[0].coverArt]));
+    expect(c[1]).toBe(c[0]);
+    expect(c[0]).toMatch(/^album-2~[0-9a-f]{32}$/);
+  });
+});
+
+// --- R7: writes ---------------------------------------------------------------
+
+test.describe('R7 writes', () => {
+  const writes = (page: Page) => page.evaluate(() => (window as any).__MOCK__.calls
+    .filter((c: any) => c.backend === 'jellyfin' && c.method !== 'GET').map((c: any) => c.method + ' ' + c.path));
+
+  test('star / unstar: POST and DELETE /UserFavoriteItems for song, album and artist ids', async ({ page }) => {
+    await page0(page);
+    await api(page);
+    await page.evaluate(async () => {
+      const a = (window as any).__jf;
+      await a.star('song-1', 'song');
+      await a.unstar('song-1', 'song');
+      await a.star('album-2', 'album');
+      await a.unstar('album-2', 'album');
+      await a.star('artist-3', 'artist');
+    });
+    expect(await writes(page)).toEqual(['POST /UserFavoriteItems/song-1', 'DELETE /UserFavoriteItems/song-1',
+      'POST /UserFavoriteItems/album-2', 'DELETE /UserFavoriteItems/album-2', 'POST /UserFavoriteItems/artist-3']);
+  });
+
+  test('scrobble: one POST /UserPlayedItems with datePlayed (P8, D185)', async ({ page }) => {
+    await page0(page);
+    await api(page);
+    const t0 = Date.now();
+    await page.evaluate(() => (window as any).__jf.scrobble('song-3'));
+    expect(await writes(page)).toEqual(['POST /UserPlayedItems/song-3']);
+    const s = await page.evaluate(() => (window as any).__MOCK__.jf.scrobbles);
+    expect(s.length).toBe(1);
+    expect(s[0].id).toBe('song-3');
+    expect(Math.abs(Date.parse(s[0].datePlayed) - t0)).toBeLessThan(60000);
+    expect(s[0].datePlayed).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+  });
+
+  test('a failed favourite rolls StarredCache back', async ({ page }) => {
+    await page0(page, 'mockJfFavFail=1');
+    await api(page);
+    const r = await page.evaluate(async () => {
+      const w = window as any;
+      const now = w.StarredCache.toggleSong('song-1', w.__jf);
+      const during = w.StarredCache.isSongStarred('song-1');
+      await new Promise((res) => setTimeout(res, 300));
+      return { now, during, after: w.StarredCache.isSongStarred('song-1') };
+    });
+    expect(r).toEqual({ now: true, during: true, after: false });
+    expect(await writes(page)).toEqual(['POST /UserFavoriteItems/song-1']);
+  });
+
+  test('reads write nothing: a walk through every read sends only GETs', async ({ page }) => {
+    await page0(page, 'mockLyrics=1&mockArtistInfo=1');
+    await api(page);
+    await page.evaluate(async () => {
+      const a = (window as any).__jf;
+      await a.getMusicFolders(); await a.getAlbumList2('newest', 6); await a.getAlbumList2('recent', 6);
+      await a.getAlbum('album-1'); await a.getSong('song-2'); await a.getArtists(null); await a.getArtist('artist-1');
+      await a.getArtistInfo2('artist-1'); await a.getTopSongs('A Artist 01', 5); await a.getSimilarSongs2('artist-0', 50);
+      await a.getGenres(); await a.createSongPager('all', null, null, 50).count(); await a.getRandomSongs(10);
+      await a.search3('Track', {}); await a.getStarred2(null); await a.getPlaylists(); await a.getPlaylist('pl-0');
+      await a.getLyricsBySongId('song-1'); await a.countAlbums('newest', null, null);
+    });
+    expect(await writes(page)).toEqual([]);
+  });
+});
