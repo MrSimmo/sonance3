@@ -1514,6 +1514,14 @@ var SubsonicAPI = (function() {
         return open.length;
     };
 
+    // D196 (v3.13, P2): the open-request registry, so abortAll() also
+    // cancels js/jellyfin-api.js's fetches. Returns the function that
+    // forgets `rec` ({ endpoint, controller }) once it settles.
+    SubsonicAPI._trackRequest = function(rec) {
+        _openRequests.push(rec);
+        return function() { _forgetRequest(rec); };
+    };
+
     // V3.8: instance-level memory cache reset, used by App.applyLibraryChange.
     // Mirrors the static clearCache (the in-memory cache is shared across
     // instances) but exposed on the prototype so the orchestrator can call it

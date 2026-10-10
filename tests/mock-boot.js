@@ -805,7 +805,18 @@
         var call = { backend: 'jellyfin', method: method, path: pathname, query: q, auth: auth.header, body: body, t: performance.now() };
         window.__MOCK__.calls.push(call);
         window.__MOCK__.hits[pathname] = (window.__MOCK__.hits[pathname] || 0) + 1;
-        function answer(p) { return p.then(function(r) { call.status = r.status; return r; }); }
+        // As a real fetch: an abort rejects at once with an AbortError.
+        var signal = opts && opts.signal;
+        function answer(p) {
+            p = p.then(function(r) { call.status = r.status; return r; });
+            if (!signal) return p;
+            return new Promise(function(resolve, reject) {
+                function aborted() { call.aborted = true; reject(new DOMException('The user aborted a request.', 'AbortError')); }
+                if (signal.aborted) { aborted(); return; }
+                signal.addEventListener('abort', aborted);
+                p.then(resolve, reject);
+            });
+        }
 
         if (pathname === '/System/Info/Public') {
             return answer(jfResp({ LocalAddress: window.location.origin, ServerName: 'Mock Jellyfin', Version: JF_VERSION,
