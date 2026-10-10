@@ -447,6 +447,8 @@
     //                          empty = a passwordless account)
     //   mockJfFavFail=1        UserFavoriteItems writes answer 500
     //   mockLyricsUnsynced=1   lyrics without timestamps (mockLyrics=1: synced)
+    //   mockJfAlbumOpus=1      an album track whose fixture song is Opus is
+    //                          Opus too (the Subsonic album tracks are all WAV)
     var JELLYFIN = /[?&]mockBackend=jellyfin(&|$)/.test(window.location.search);
     var JF_VERSION = '12.2.0';
     var JF_USER = 'mockuser';
@@ -459,6 +461,7 @@
     var JF_REVOKED = /[?&]mockJfRevoked=1/.test(window.location.search);
     var JF_FAV_FAIL = /[?&]mockJfFavFail=1/.test(window.location.search);
     var LYRICS_UNSYNCED = /[?&]mockLyricsUnsynced=1/.test(window.location.search);
+    var JF_ALBUM_OPUS = /[?&]mockJfAlbumOpus=1/.test(window.location.search);
     var TICKS = 10000000;
 
     // Valid tokens, and the token each DeviceId holds: signing in again from
@@ -528,6 +531,11 @@
 
     function _jfSong(s, fields, detail) {
         var alb = s.albumId ? _albumOf(s.albumId) : null;
+        if (JF_ALBUM_OPUS && /^song-album-/.test(s.id)) {
+            var parts = /^song-album-(\d+)-(\d+)$/.exec(s.id);
+            var base = mockSongs[(parseInt(parts[1], 10) * 10 + parseInt(parts[2], 10)) % mockSongs.length];
+            if (base && base.suffix === 'opus') s = Object.assign({}, s, { suffix: 'opus', contentType: 'audio/ogg' });
+        }
         var opus = s.suffix === 'opus';
         var o = {
             Name: s.title, Id: s.id, Type: 'Audio', MediaType: 'Audio', IsFolder: false,
@@ -580,7 +588,8 @@
         var o = { Name: p.name, Id: p.id, Type: 'Playlist', IsFolder: true, MediaType: 'Audio',
             ImageTags: p.coverArt ? { Primary: _tagFor(p.coverArt) } : {}, LocationType: 'FileSystem' };
         if (fields.ChildCount || detail) o.ChildCount = p.songCount;
-        if (fields.CumulativeRunTimeTicks || detail) o.CumulativeRunTimeTicks = p.duration * TICKS;
+        // As 12.2: a playlist's duration is on the item, never in a list.
+        if (detail) o.RunTimeTicks = o.CumulativeRunTimeTicks = p.duration * TICKS;
         return o;
     }
 

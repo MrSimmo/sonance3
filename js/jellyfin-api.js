@@ -12,8 +12,9 @@
 // unchanged on either backend, and every screen sees the same objects.
 //
 // Overridden whole: the constructor, ping, getStreamUrl, getCoverArtUrl,
-// savePlayQueue, getPlayQueue, clearMemoryCache, and _buildUrl, which
-// throws: no inherited path may build a Subsonic URL on a Jellyfin session.
+// savePlayQueue, getPlayQueue, clearMemoryCache, countAlbums and the Song
+// pager's count (D197), and _buildUrl, which throws: no inherited path may
+// build a Subsonic URL on a Jellyfin session.
 //
 // Auth (P4, D-numbers in ticket §9): API calls carry
 // `Authorization: MediaBrowser Client=…, Device=…, DeviceId=…, Version=…,
@@ -600,6 +601,41 @@ var JellyfinAPI = (function() {
         });
     };
 
+    // D197: list lengths come from TotalRecordCount, one Limit=0 request per
+    // library, where SubsonicAPI binary-searches offsets with one-item
+    // probes. Live, the probes cost 1.5 s for the albums count and 6.9 s for
+    // the Songs list's (each one sorts the whole library), against ~0.1 s
+    // here. Same totals, cached through _cachedRequest like everything else.
+    JellyfinAPI.prototype.countAlbums = function(type, libraryIds, extra) {
+        var self = this;
+        var scope = (libraryIds && libraryIds.length) ? libraryIds : [null];
+        return Promise.all(scope.map(function(folderId) {
+            var params = { type: type };
+            if (extra) Object.keys(extra).forEach(function(k) { params[k] = extra[k]; });
+            if (folderId !== null && folderId !== undefined) params.musicFolderId = folderId;
+            return self._cachedRequest('jf:albumCount', params).then(function(r) { return r.total; });
+        })).then(function(totals) {
+            var sum = 0;
+            for (var i = 0; i < totals.length; i++) sum += totals[i];
+            return sum;
+        });
+    };
+
+    // The Songs and genre lists (v3.10 A1 SongPager): the same pager, with
+    // its per-library total read the D197 way. `_segTotal(seg)` is the
+    // pager's one count hook (js/api.js); `seg.id` is the library or null.
+    JellyfinAPI.prototype.createSongPager = function(kind, arg, libraryIds, pageSize) {
+        var self = this;
+        var pager = SubsonicAPI.prototype.createSongPager.call(this, kind, arg, libraryIds, pageSize);
+        pager._segTotal = function(seg) {
+            var params = { kind: kind };
+            if (kind === 'genre') params.genre = arg;
+            if (seg.id !== null && seg.id !== undefined) params.folder = String(seg.id);
+            return self._cachedRequest('jf:songCount', params).then(function(r) { return r.total; });
+        };
+        return pager;
+    };
+
     JellyfinAPI.prototype._rememberArtist = function(name, id) {
         if (name && id) this._artistIds[name] = id;
     };
@@ -694,6 +730,25 @@ var JellyfinAPI = (function() {
             return this._get('/Items', q).then(function(r) {
                 return { albumList2: { album: _albumsOf(r, folder) } };
             });
+        },
+
+        'jf:albumCount': function(p) {
+            var folder = _scope(p);
+            if (p.type === 'recent' || p.type === 'frequent') {
+                return this._cachedRequest('jf:playedAlbums', folder ? { folder: folder } : null).then(function(agg) {
+                    return { total: (p.type === 'recent' ? agg.recent : agg.frequent).length };
+                });
+            }
+            var q = { IncludeItemTypes: 'MusicAlbum', Recursive: 'true', Limit: 0, ParentId: folder };
+            var order = _albumOrder(p.type, p);
+            Object.keys(order).forEach(function(k) { if (k !== 'SortBy' && k !== 'SortOrder') q[k] = order[k]; });
+            return this._get('/Items', q).then(function(r) { return { total: (r && r.TotalRecordCount) || 0 }; });
+        },
+
+        'jf:songCount': function(p) {
+            return this._get('/Items', { IncludeItemTypes: 'Audio', Recursive: 'true', Limit: 0,
+                Genres: p.kind === 'genre' ? p.genre : null, ParentId: p.folder || null
+            }).then(function(r) { return { total: (r && r.TotalRecordCount) || 0 }; });
         },
 
         // P7's aggregate: albums by their newest play, and by their tracks'
@@ -936,10 +991,12 @@ var JellyfinAPI = (function() {
         },
 
         // Audio playlists (a video playlist says MediaType Video; an empty
-        // one may say Unknown).
+        // one may say Unknown). D198: the list carries no duration (12.2's
+        // DtoService copies a playlist's own RunTimeTicks, empty in lists),
+        // so a card shows the song count alone; the detail has it.
         'getPlaylists.view': function() {
             return this._get('/Items', { IncludeItemTypes: 'Playlist', Recursive: 'true',
-                Fields: 'ChildCount,CumulativeRunTimeTicks' }).then(function(r) {
+                Fields: 'ChildCount' }).then(function(r) {
                 var lists = _list(r && r.Items).filter(function(it) {
                     return it && (it.MediaType === 'Audio' || it.MediaType === 'Unknown' || !it.MediaType);
                 });
