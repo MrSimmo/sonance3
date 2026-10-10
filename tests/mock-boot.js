@@ -415,11 +415,526 @@
         }));
     }
 
+    // --- Jellyfin mock (v3.13 R12.1, D193) -----------------------------------
+    //
+    // `?mockBackend=jellyfin` answers the Jellyfin 12.x endpoints
+    // js/jellyfin-api.js calls, from the SAME fixtures above re-shaped as
+    // Jellyfin JSON (PascalCase, ticks, ImageTags, per-track UserData,
+    // MediaSources/MediaStreams; null fields left out), and makes /rest/ a
+    // 404, as on a Jellyfin server. Off (the default) none of it runs: the
+    // Subsonic mock is exactly as before, and /System/Info/Public stays the
+    // static server's 404, which is what drives login detection there.
+    //
+    // Item ids are the fixture ids (not Jellyfin's 32 hex characters; the
+    // adapter treats ids as opaque), so a cover is the very PNG
+    // tests/dev-server.js serves getCoverArt for that id: the two mocks
+    // match pixel for pixel.
+    //
+    // Where the Subsonic fixtures carry something Jellyfin has no field for
+    // (performer sub-roles, BPM, an original release year), it is left out:
+    // those are the capability matrix's documented gaps. Two Subsonic-mock
+    // shapes are mirrored per query, as that mock answers them:
+    //   - play data: `Filters=IsPlayed` with `ArtistIds` is getTopSongs'
+    //     answer (an even artist's first album, in track order); without it,
+    //     P7's history: one played track per album, the album's play count on
+    //     it, later albums played later (Recently played = newest first,
+    //     Most played = the album playCount order, as the Subsonic mock);
+    //   - favourites: albums 1, 5, 9 … are favourites (its `starred` list);
+    //     no favourite songs or artists (its getStarred2 has none).
+    // Knobs (the Subsonic ones apply where they mean something here):
+    //   mockJfRevoked=1        the seeded token is refused until a sign-in
+    //   mockJfPassword=<pw>    the password sign-in accepts (default mockpass;
+    //                          empty = a passwordless account)
+    //   mockJfFavFail=1        UserFavoriteItems writes answer 500
+    //   mockLyricsUnsynced=1   lyrics without timestamps (mockLyrics=1: synced)
+    var JELLYFIN = /[?&]mockBackend=jellyfin(&|$)/.test(window.location.search);
+    var JF_VERSION = '12.2.0';
+    var JF_USER = 'mockuser';
+    var JF_USER_ID = 'f00dfeed0000000000000000000000a1';
+    var JF_SEED_TOKEN = 'mock-jf-token-seed';
+    var JF_PASSWORD = (function() {
+        var m = /[?&]mockJfPassword=([^&]*)/.exec(window.location.search);
+        return m ? decodeURIComponent(m[1]) : 'mockpass';
+    })();
+    var JF_REVOKED = /[?&]mockJfRevoked=1/.test(window.location.search);
+    var JF_FAV_FAIL = /[?&]mockJfFavFail=1/.test(window.location.search);
+    var LYRICS_UNSYNCED = /[?&]mockLyricsUnsynced=1/.test(window.location.search);
+    var TICKS = 10000000;
+
+    // Valid tokens, and the token each DeviceId holds: signing in again from
+    // the same device revokes that device's previous token, as on 12.x.
+    var jfTokens = {};
+    var jfDeviceTokens = {};
+    var jfTokenSeq = 0;
+    if (!JF_REVOKED) jfTokens[JF_SEED_TOKEN] = true;
+
+    // A deterministic 32-hex image tag per image id (FNV-1a, four rounds).
+    function _tagFor(id) {
+        var out = '';
+        for (var r = 0; r < 4; r++) {
+            var h = (2166136261 ^ r) >>> 0;
+            var s = String(id);
+            for (var i = 0; i < s.length; i++) {
+                h ^= s.charCodeAt(i);
+                h = Math.imul(h, 16777619) >>> 0;
+            }
+            out += ('00000000' + h.toString(16)).slice(-8);
+        }
+        return out;
+    }
+
+    function _compact(o) {
+        Object.keys(o).forEach(function(k) { if (o[k] === undefined || o[k] === null) delete o[k]; });
+        return o;
+    }
+
+    function _isFavAlbum(a) {
+        return (parseInt(String(a.id).replace('album-', ''), 10) || 0) % 4 === 1;
+    }
+
+    function _albumOf(id) { return _byId(mockAlbums, id); }
+
+    function _jfAlbum(a, fields, detail) {
+        var o = {
+            Name: a.name, Id: a.id, Type: 'MusicAlbum', IsFolder: true, MediaType: 'Unknown',
+            AlbumArtist: a.artist, AlbumArtists: [{ Name: a.artist, Id: a.artistId }],
+            ArtistItems: [{ Name: a.artist, Id: a.artistId }], Artists: [a.artist],
+            ProductionYear: a.year, PremiereDate: a.year + '-01-01T00:00:00.0000000Z',
+            Genres: [a.genre], RunTimeTicks: a.duration * TICKS,
+            ImageTags: { Primary: _tagFor(a.coverArt) },
+            UserData: { PlaybackPositionTicks: 0, PlayCount: 0, IsFavorite: _isFavAlbum(a), Played: false, Key: a.id },
+            LocationType: 'FileSystem'
+        };
+        if (fields.ChildCount || detail) o.ChildCount = a.songCount;
+        if (fields.DateCreated || detail) o.DateCreated = a.created;
+        if (detail) {
+            o.ParentId = a.musicFolderId;
+            o.Studios = [{ Name: 'Mock Records', Id: 'studio-mock' }];
+        }
+        return o;
+    }
+
+    function _jfStream(s) {
+        var opus = s.suffix === 'opus';
+        return _compact({
+            Type: 'Audio', Index: 0, Codec: opus ? 'opus' : 'pcm_s16le',
+            BitRate: (s.bitRate || 1411) * 1000, SampleRate: s.samplingRate || 44100,
+            BitDepth: opus ? null : (s.bitDepth || 16), Channels: s.channelCount || 2
+        });
+    }
+
+    var JF_ROLES = { composer: 'Composer', lyricist: 'Lyricist', producer: 'Producer', mixer: 'Mixer',
+        engineer: 'Engineer', arranger: 'Arranger', remixer: 'Remixer', conductor: 'Conductor' };
+
+    function _jfSong(s, fields, detail) {
+        var alb = s.albumId ? _albumOf(s.albumId) : null;
+        var opus = s.suffix === 'opus';
+        var o = {
+            Name: s.title, Id: s.id, Type: 'Audio', MediaType: 'Audio', IsFolder: false,
+            Album: s.album, AlbumId: s.albumId,
+            AlbumPrimaryImageTag: s.coverArt ? _tagFor(s.coverArt) : null,
+            AlbumArtist: alb ? alb.artist : null,
+            AlbumArtists: alb ? [{ Name: alb.artist, Id: alb.artistId }] : [],
+            ArtistItems: s.artistId ? [{ Name: s.artist, Id: s.artistId }] : [], Artists: [s.artist],
+            IndexNumber: s.track, ProductionYear: s.year, RunTimeTicks: s.duration * TICKS,
+            Container: opus ? 'ogg' : 'wav', HasLyrics: LYRICS || LYRICS_UNSYNCED,
+            ImageTags: {},
+            UserData: { PlaybackPositionTicks: 0, PlayCount: 0, IsFavorite: false, Played: false, Key: s.id },
+            LocationType: 'FileSystem'
+        };
+        if (fields.MediaStreams) o.MediaStreams = [_jfStream(s)];
+        if (detail) {
+            var c = _songWithCredits(s);
+            o.ParentIndexNumber = c.discNumber;
+            o.Genres = (c.genres || []).map(function(g) { return g.name; });
+            o.AlbumArtist = c.displayAlbumArtist;
+            o.AlbumArtists = (c.albumArtists || []).map(function(a) { return { Name: a.name, Id: a.id }; });
+            o.People = (c.contributors || []).filter(function(p) { return JF_ROLES[p.role]; }).map(function(p) {
+                return { Name: p.artist.name, Id: p.artist.id, Role: '', Type: JF_ROLES[p.role] };
+            });
+            o.UserData = _compact({ PlaybackPositionTicks: 0, PlayCount: c.playCount || 0, IsFavorite: false,
+                Played: !!c.played, LastPlayedDate: c.played || null, Key: s.id });
+            o.MediaStreams = [_jfStream(c)];
+            o.MediaSources = [{ Id: s.id, Protocol: 'File', Type: 'Default', Container: opus ? 'ogg' : 'wav',
+                Bitrate: (c.bitRate || 1411) * 1000, MediaStreams: o.MediaStreams }];
+            o.DateCreated = '2020-01-01T00:00:00.0000000Z';
+        }
+        return _compact(o);
+    }
+
+    function _jfArtist(a, fields, detail) {
+        var o = {
+            Name: a.name, Id: a.id, Type: 'MusicArtist', ImageTags: { Primary: _tagFor(a.coverArt) },
+            UserData: { PlaybackPositionTicks: 0, PlayCount: 0, IsFavorite: false, Played: false, Key: 'Artist-' + a.name },
+            LocationType: 'FileSystem'
+        };
+        if (fields.ItemCounts) o.AlbumCount = a.albumCount;
+        if (detail && ARTIST_INFO) {
+            var idx = parseInt(String(a.id).replace('artist-', ''), 10) || 0;
+            o.Overview = 'Biography of ' + mockArtists[idx % mockArtists.length].name + '.';
+        }
+        return o;
+    }
+
+    function _jfPlaylist(p, fields, detail) {
+        var o = { Name: p.name, Id: p.id, Type: 'Playlist', IsFolder: true, MediaType: 'Audio',
+            ImageTags: p.coverArt ? { Primary: _tagFor(p.coverArt) } : {}, LocationType: 'FileSystem' };
+        if (fields.ChildCount || detail) o.ChildCount = p.songCount;
+        if (fields.CumulativeRunTimeTicks || detail) o.CumulativeRunTimeTicks = p.duration * TICKS;
+        return o;
+    }
+
+    // Every item the fixtures hand out, by id.
+    function _jfItem(id, fields) {
+        var a = _albumOf(id);
+        if (a) return _jfAlbum(a, fields, true);
+        var s = _songById(id);
+        if (s) return _jfSong(s, fields, true);
+        var ar = _byId(mockArtists, id);
+        if (ar) return _jfArtist(ar, fields, true);
+        var pl = _byId(mockPlaylists, id);
+        if (pl) return _jfPlaylist(pl, fields, true);
+        return null;
+    }
+
+    // The list form of any item (as /Items?Ids= answers), or null when it is
+    // not in `folder` (a library id).
+    function _jfListItem(id, fields, folder) {
+        var a = _albumOf(id);
+        if (a) return (!folder || a.musicFolderId === folder) ? _jfAlbum(a, fields, false) : null;
+        var s = _songById(id);
+        if (s) {
+            var lib = s.musicFolderId || (_albumOf(s.albumId) || {}).musicFolderId;
+            return (!folder || lib === folder) ? _jfSong(s, fields, false) : null;
+        }
+        var ar = _byId(mockArtists, id);
+        if (ar) return (!folder || ar.musicFolderId === folder) ? _jfArtist(ar, fields, false) : null;
+        var pl = _byId(mockPlaylists, id);
+        if (pl) return folder ? null : _jfPlaylist(pl, fields, false);
+        return null;
+    }
+
+    function _fieldSet(q) {
+        var out = {};
+        String(q.Fields || '').split(',').forEach(function(f) { if (f) out[f] = true; });
+        return out;
+    }
+
+    // P7's play history, as the Subsonic mock's `recent` and `frequent`.
+    function _playedTracks(folder) {
+        if (EMPTY_LISTS.recent || EMPTY_LISTS.frequent) return [];
+        return _scoped(mockAlbums, folder).slice().reverse().map(function(a, n, arr) {
+            var t = _songsForAlbum(a)[0];
+            t.musicFolderId = a.musicFolderId;
+            t._played = { PlayCount: a.playCount, LastPlayedDate:
+                new Date(Date.UTC(2026, 0, 1) + (arr.length - n) * 60000).toISOString(), Played: true };
+            return t;
+        });
+    }
+
+    // getTopSongs' answer, as the Subsonic mock's, with descending plays so
+    // PlayCount order is track order.
+    function _topTracks(artistId) {
+        var idx = parseInt(String(artistId).replace('artist-', ''), 10);
+        if (TOP_SONGS_FAIL || isNaN(idx) || idx % 2 !== 0) return [];
+        var owned = mockAlbums.filter(function(al) { return al.artistId === artistId; });
+        if (!owned.length) return [];
+        return _songsForAlbum(owned[0]).map(function(t, n) {
+            t._played = { PlayCount: 100 - n, LastPlayedDate: '2026-02-01T00:00:00.0000000Z', Played: true };
+            return t;
+        });
+    }
+
+    function _withPlayed(o, t) {
+        if (t._played) Object.keys(t._played).forEach(function(k) { o.UserData[k] = t._played[k]; });
+        return o;
+    }
+
+    function _matchTerm(list, term) {
+        if (!term) return list;
+        var needle = term.toLowerCase();
+        return list.filter(function(it) {
+            return String(it.name || it.title || '').toLowerCase().indexOf(needle) > -1;
+        });
+    }
+
+    function _page(list, q) {
+        var start = _intParam(q, 'StartIndex', 0);
+        var limit = q.Limit === undefined ? list.length : _intParam(q, 'Limit', list.length);
+        return list.slice(start, start + limit);
+    }
+
+    function jfResp(body, status) {
+        return Promise.resolve(new Response(body === null ? null : JSON.stringify(body), {
+            status: status || 200, headers: { 'Content-Type': 'application/json' }
+        }));
+    }
+
+    function jfItems(all, q, shape) {
+        var items = _page(all, q).map(shape);
+        return jfResp({ Items: items, TotalRecordCount: all.length, StartIndex: _intParam(q, 'StartIndex', 0) });
+    }
+
+    function _delayed(ms, fn) {
+        if (!ms) return fn();
+        return new Promise(function(resolve) { setTimeout(resolve, ms); }).then(fn);
+    }
+
+    function _albumOrderJf(pool, q) {
+        var sortBy = q.SortBy || '';
+        var desc = /^Descending/.test(q.SortOrder || '');
+        if (/^Random/.test(sortBy)) return _orderAlbums(pool, 'random', q);
+        if (/^DateCreated/.test(sortBy)) return desc ? pool.slice().reverse() : pool.slice();
+        if (/^AlbumArtist/.test(sortBy)) return _orderAlbums(pool, 'alphabeticalByArtist', q);
+        if (/^ProductionYear/.test(sortBy)) {
+            return pool.slice().sort(function(a, b) {
+                var c = (a.year - b.year) || _cmpStr(a.name, b.name);
+                return desc ? -c : c;
+            });
+        }
+        return pool.slice();   // SortName: fixture order is name order
+    }
+
+    function _jfAlbums(q, fields) {
+        var folder = q.ParentId || null;
+        var pool = _scoped(mockAlbums, folder);
+        if (q.Ids) {
+            var want = q.Ids.split(',');
+            pool = want.map(_albumOf).filter(function(a) { return a && (!folder || a.musicFolderId === folder); });
+        }
+        if (/IsFavorite/.test(q.Filters || '')) pool = EMPTY_LISTS.starred ? [] : pool.filter(_isFavAlbum);
+        if (q.Genres) pool = pool.filter(function(a) { return a.genre === q.Genres; });
+        if (q.Years) {
+            var years = q.Years.split(',').map(Number);
+            pool = pool.filter(function(a) { return years.indexOf(a.year) > -1; });
+        }
+        if (q.AlbumArtistIds) pool = pool.filter(function(a) { return a.artistId === q.AlbumArtistIds; });
+        if (q.ArtistIds) pool = pool.filter(function(a) { return a.artistId === q.ArtistIds; });
+        pool = _matchTerm(pool, q.searchTerm);
+        if (!q.Ids) {
+            var type = /^Random/.test(q.SortBy || '') ? 'random'
+                : /^DateCreated/.test(q.SortBy || '') ? 'newest'
+                : /IsFavorite/.test(q.Filters || '') ? 'starred' : null;
+            if (type && EMPTY_LISTS[type]) pool = [];
+            pool = _albumOrderJf(pool, q);
+        }
+        var delay = (DELAY_MS && type && DELAY_LISTS[type]) ? DELAY_MS : 0;
+        return _delayed(delay, function() {
+            return jfItems(pool, q, function(a) { return _jfAlbum(a, fields, false); });
+        });
+    }
+
+    function _jfSongs(q, fields) {
+        var folder = q.ParentId || null;
+        var shape = function(t) { return _withPlayed(_jfSong(t, fields, false), t); };
+        if (folder && _albumOf(folder)) return jfItems(_songsForAlbum(_albumOf(folder)), q, shape);
+        if (q.Ids) {
+            var ids = q.Ids.split(',');
+            var found = ids.map(_songById).filter(function(s) {
+                if (!s) return false;
+                if (!folder) return true;
+                var lib = s.musicFolderId || (_albumOf(s.albumId) || {}).musicFolderId;
+                return lib === folder;
+            });
+            return jfItems(found, q, shape);
+        }
+        if (/IsPlayed/.test(q.Filters || '')) {
+            if (q.ArtistIds) {
+                if (TOP_SONGS_FAIL) return jfResp(null, 500);
+                return jfItems(_topTracks(q.ArtistIds), q, shape);
+            }
+            return jfItems(_playedTracks(folder), q, shape);
+        }
+        if (/IsFavorite/.test(q.Filters || '')) return jfItems([], q, shape);
+        var pool = _scoped(mockSongs, folder);
+        if (q.Genres) pool = pool.filter(function(s) { return s.genre === q.Genres; });
+        pool = _matchTerm(pool, q.searchTerm);
+        return jfItems(pool, q, shape);
+    }
+
+    function _jfArtists(q, fields) {
+        var pool = _scoped(mockArtists, q.ParentId || null);
+        if (/IsFavorite/.test(q.Filters || '')) pool = [];
+        pool = _matchTerm(pool, q.searchTerm);
+        return jfItems(pool, q, function(a) { return _jfArtist(a, fields, false); });
+    }
+
+    // Each library holds every genre with its share of the counts, so the
+    // adapter's per-library sum is the Subsonic mock's getGenres.
+    function _jfGenres(q) {
+        var n = LIB_IDS.indexOf(String(q.ParentId));
+        if (n < 0) n = 0;
+        function share(total) {
+            var base = Math.floor(total / N_LIBRARIES);
+            return base + (n < total % N_LIBRARIES ? 1 : 0);
+        }
+        var items = mockGenres.map(function(g) {
+            return { Name: g.value, Id: 'genre-' + g.value, Type: 'MusicGenre',
+                SongCount: share(g.songCount), AlbumCount: share(g.albumCount) };
+        });
+        return jfResp({ Items: items, TotalRecordCount: items.length, StartIndex: 0 });
+    }
+
+    function _jfAuthToken(opts) {
+        var h = (opts && opts.headers && (opts.headers.Authorization || opts.headers.authorization)) || '';
+        var m = /Token="([^"]*)"/.exec(h);
+        return { header: h, token: m ? decodeURIComponent(m[1]) : null,
+            device: decodeURIComponent((/DeviceId="([^"]*)"/.exec(h) || [])[1] || '') };
+    }
+
+    // The Jellyfin answer for `u`, or null to pass the request through
+    // (static files, and media, which tests/dev-server.js serves).
+    function _jellyfinFetch(u, opts) {
+        var at = u.indexOf('://');
+        var path = at > -1 ? u.slice(u.indexOf('/', at + 3)) : u;
+        var qAt = path.indexOf('?');
+        var pathname = qAt > -1 ? path.slice(0, qAt) : path;
+        var q = _query(path);
+        var method = (opts && opts.method) || 'GET';
+
+        if (/^\/rest\//.test(pathname)) {
+            window.__MOCK__.calls.push({ backend: 'jellyfin', method: method, path: pathname, status: 404, t: performance.now() });
+            return Promise.resolve(new Response('', { status: 404 }));
+        }
+        if (/^\/(Items\/[^/]+\/Images\/|Audio\/[^/]+\/stream)/.test(pathname)) return null;
+        if (!/^\/(System|Users|Sessions|UserViews|Items|Artists|Genres|Playlists|Audio|UserFavoriteItems|UserPlayedItems)(\/|$)/.test(pathname)) return null;
+
+        var auth = _jfAuthToken(opts);
+        var body = null;
+        try { body = opts && typeof opts.body === 'string' ? JSON.parse(opts.body) : null; } catch (e) { body = null; }
+        var call = { backend: 'jellyfin', method: method, path: pathname, query: q, auth: auth.header, body: body, t: performance.now() };
+        window.__MOCK__.calls.push(call);
+        window.__MOCK__.hits[pathname] = (window.__MOCK__.hits[pathname] || 0) + 1;
+        function answer(p) { return p.then(function(r) { call.status = r.status; return r; }); }
+
+        if (pathname === '/System/Info/Public') {
+            return answer(jfResp({ LocalAddress: window.location.origin, ServerName: 'Mock Jellyfin', Version: JF_VERSION,
+                ProductName: 'Jellyfin Server', OperatingSystem: '', Id: 'mockjellyfinserver00000000000001',
+                StartupWizardCompleted: true }));
+        }
+        if (pathname === '/Users/AuthenticateByName' && method === 'POST') {
+            var okUser = body && String(body.Username || '').toLowerCase() === JF_USER;
+            var okPw = body && (body.Pw || '') === JF_PASSWORD;
+            if (!okUser || !okPw) return answer(jfResp(null, 401));
+            if (auth.device && jfDeviceTokens[auth.device]) delete jfTokens[jfDeviceTokens[auth.device]];
+            var token = 'mock-jf-token-' + (++jfTokenSeq);
+            jfTokens[token] = true;
+            if (auth.device) jfDeviceTokens[auth.device] = token;
+            return answer(jfResp({ User: { Name: JF_USER, Id: JF_USER_ID, HasPassword: true },
+                SessionInfo: { DeviceId: auth.device, UserId: JF_USER_ID }, AccessToken: token,
+                ServerId: 'mockjellyfinserver00000000000001' }));
+        }
+        if (!auth.token || !jfTokens[auth.token]) return answer(jfResp(null, 401));
+
+        if (pathname === '/System/Info') {
+            return answer(_delayed(PING_DELAY, function() {
+                return jfResp({ Version: JF_VERSION, ProductName: 'Jellyfin Server', ServerName: 'Mock Jellyfin',
+                    Id: 'mockjellyfinserver00000000000001' });
+            }));
+        }
+        if (pathname === '/Sessions/Logout' && method === 'POST') {
+            delete jfTokens[auth.token];
+            return answer(Promise.resolve(new Response(null, { status: 204 })));
+        }
+        if (pathname === '/UserViews') {
+            // The music libraries are hidden from the user's home screen, as the
+            // test profile's is: only includeHidden=true lists them.
+            var views = [{ Name: 'Films', Id: 'view-movies', CollectionType: 'movies', Type: 'CollectionFolder' }];
+            if (q.includeHidden === 'true') {
+                LIB_IDS.forEach(function(id, n) {
+                    views.push({ Name: 'Library ' + (n + 1), Id: id, CollectionType: 'music', Type: 'CollectionFolder' });
+                });
+            }
+            return answer(jfResp({ Items: views, TotalRecordCount: views.length, StartIndex: 0 }));
+        }
+
+        var fields = _fieldSet(q);
+        var m;
+        if (pathname === '/Items') {
+            var types = q.IncludeItemTypes || '';
+            if (types === 'MusicAlbum') return answer(_jfAlbums(q, fields));
+            if (types === 'Audio') return answer(_jfSongs(q, fields));
+            if (types === 'Playlist') return answer(jfItems(mockPlaylists, q, function(p) { return _jfPlaylist(p, fields, false); }));
+            if (q.Ids) {
+                // List-form items of any type, in the order asked, each once;
+                // ParentId keeps those in that library (P10's lookups).
+                var seenIds = {};
+                var listed = q.Ids.split(',').filter(function(id) {
+                    if (seenIds[id]) return false;
+                    seenIds[id] = true;
+                    return true;
+                }).map(function(id) { return _jfListItem(id, fields, q.ParentId || null); }).filter(Boolean);
+                return answer(jfItems(listed, q, function(x) { return x; }));
+            }
+            return answer(jfResp({ Items: [], TotalRecordCount: 0, StartIndex: 0 }));
+        }
+        if ((m = /^\/Items\/([^/]+)\/InstantMix$/.exec(pathname))) {
+            var mixId = decodeURIComponent(m[1]);
+            if (similarFailsLeft > 0) {
+                similarFailsLeft--;
+                return answer(jfResp(null, 500));
+            }
+            var simIdx = parseInt(String(mixId).replace('artist-', ''), 10) || 0;
+            var mix = mockSongs.filter(function(sg) { return sg.artistId !== mixId; })
+                .slice(0, Math.min(_intParam(q, 'Limit', 50), simIdx % 2 === 0 ? 12 : 3));
+            return answer(_delayed(SIMILAR_DELAY, function() {
+                return jfItems(mix, {}, function(t) { return _jfSong(t, fields, false); });
+            }));
+        }
+        if ((m = /^\/Items\/([^/]+)$/.exec(pathname))) {
+            var item = _jfItem(decodeURIComponent(m[1]), fields);
+            return answer(item ? jfResp(item) : jfResp(null, 404));
+        }
+        if (pathname === '/Artists/AlbumArtists' || pathname === '/Artists') return answer(_jfArtists(q, fields));
+        if ((m = /^\/Artists\/([^/]+)\/Similar$/.exec(pathname))) {
+            var simArtist = decodeURIComponent(m[1]);
+            var infoIdx = Math.max(0, parseInt(String(simArtist).replace('artist-', ''), 10) || 0) % mockArtists.length;
+            var similar = ARTIST_INFO ? [1, 2, 3].map(function(d) { return mockArtists[(infoIdx + d) % mockArtists.length]; }) : [];
+            var held = (ARTIST_INFO_DELAY && (!ARTIST_INFO_DELAY_ID || simArtist === ARTIST_INFO_DELAY_ID)) ? ARTIST_INFO_DELAY : 0;
+            return answer(_delayed(held, function() {
+                return jfItems(similar, {}, function(a) { return _jfArtist(a, {}, false); });
+            }));
+        }
+        if (pathname === '/Genres') return answer(_jfGenres(q));
+        if ((m = /^\/Playlists\/([^/]+)\/Items$/.exec(pathname))) {
+            return answer(jfItems(mockSongs, q, function(t, n) {
+                var o = _jfSong(t, fields, false);
+                o.PlaylistItemId = 'pli-' + t.id;
+                return o;
+            }));
+        }
+        if ((m = /^\/Audio\/([^/]+)\/Lyrics$/.exec(pathname))) {
+            if (!LYRICS && !LYRICS_UNSYNCED) return answer(jfResp(null, 404));
+            var songId = decodeURIComponent(m[1]);
+            var lyr = [];
+            for (var ln = 0; ln < 12; ln++) {
+                var line = { Text: 'Lyric line ' + (ln + 1) + ' for ' + songId, Cues: [] };
+                if (!LYRICS_UNSYNCED) line.Start = (5000 + ln * 10000) * 10000;
+                lyr.push(line);
+            }
+            return answer(jfResp({ Metadata: {}, Lyrics: lyr }));
+        }
+        if ((m = /^\/UserFavoriteItems\/([^/]+)$/.exec(pathname))) {
+            window.__MOCK__.starCalls.push({ op: method === 'DELETE' ? 'unstar' : 'star', id: decodeURIComponent(m[1]) });
+            if (JF_FAV_FAIL) return answer(jfResp(null, 500));
+            return answer(jfResp({ IsFavorite: method !== 'DELETE', Key: decodeURIComponent(m[1]) }));
+        }
+        if ((m = /^\/UserPlayedItems\/([^/]+)$/.exec(pathname)) && method === 'POST') {
+            window.__MOCK__.jf.scrobbles.push({ id: decodeURIComponent(m[1]), datePlayed: q.datePlayed || null });
+            return answer(jfResp({ Played: true, PlayCount: 1, Key: decodeURIComponent(m[1]) }));
+        }
+        return answer(jfResp(null, 404));
+    }
+
     // --- fetch mock ---------------------------------------------------------
 
     var origFetch = window.fetch.bind(window);
     window.fetch = function(url, opts) {
         var u = typeof url === 'string' ? url : url.url;
+        if (JELLYFIN) {
+            var jf = _jellyfinFetch(u, opts);
+            if (jf) return jf;
+        }
         if (!/\/rest\//.test(u)) return origFetch(url, opts);
 
         // Media endpoints stay on the wire so the dev server serves real bytes
@@ -712,6 +1227,17 @@
         localStorage.setItem('sonance_password', 'mockpass');
         localStorage.setItem('sonance_logged_in', 'true');
     }
+    // v3.13: a Jellyfin session on top (P5's keys); the device id is the
+    // app's own to make.
+    var JF_SESSION_KEYS = ['sonance_backend', 'sonance_jf_token', 'sonance_jf_user_id', 'sonance_jf_server_version'];
+    if (JELLYFIN && NO_SESSION) {
+        JF_SESSION_KEYS.forEach(function(k) { localStorage.removeItem(k); });
+    } else if (JELLYFIN) {
+        localStorage.setItem('sonance_backend', 'jellyfin');
+        localStorage.setItem('sonance_jf_token', JF_SEED_TOKEN);
+        localStorage.setItem('sonance_jf_user_id', JF_USER_ID);
+        localStorage.setItem('sonance_jf_server_version', JF_VERSION);
+    }
 
     // Exposed so Playwright runs can assert against the fixture set they asked for.
     window.__MOCK__ = {
@@ -728,6 +1254,14 @@
         counts: {
             albums: N_ALBUMS, artists: N_ARTISTS,
             songs: N_SONGS, libraries: N_LIBRARIES
-        }
+        },
+        // v3.13: the Jellyfin mock's state (null on the Subsonic mock).
+        jf: JELLYFIN ? {
+            version: JF_VERSION,
+            userId: JF_USER_ID,
+            seedToken: JF_SEED_TOKEN,
+            scrobbles: [],
+            tokens: function() { return Object.keys(jfTokens); }
+        } : null
     };
 })();

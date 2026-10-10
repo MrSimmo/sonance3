@@ -17,6 +17,8 @@
 //                             HTML5 fallback player actually progresses; with
 //                             format=mp3 (v3.12 R1), a transcode: MP3, chunked,
 //                             no byte ranges, timeOffset honoured.
+//   /Items/{id}/Images/Primary, /Audio/{id}/stream[.mp3]
+//                           → the same media for the Jellyfin mock (v3.13).
 //
 // Static assets are sent `no-store` so an edit is always picked up between
 // runs; only the synthetic media is cacheable.
@@ -227,7 +229,7 @@ var _mp3 = (function() {
 // audible here: every answer is TRANSCODE_SECONDS long, as from a track long
 // enough to have that much left, and the offset is echoed in a header for
 // anyone reading the response.
-function sendTranscoded(req, res, format, timeOffset) {
+function sendTranscoded(req, res, format, timeOffset, echo) {
     if (format !== 'mp3') {
         res.writeHead(400, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
         res.end('dev-server transcodes to mp3 only, not ' + format);
@@ -237,7 +239,7 @@ function sendTranscoded(req, res, format, timeOffset) {
         'Content-Type': 'audio/mpeg',
         'Cache-Control': 'no-store',
         'Accept-Ranges': 'none',
-        'X-Mock-Transcode': format + '; timeOffset=' + (parseInt(timeOffset, 10) || 0)
+        'X-Mock-Transcode': echo || (format + '; timeOffset=' + (parseInt(timeOffset, 10) || 0))
     });
     if (req.method === 'HEAD') { res.end(); return; }
     // Written in pieces, as a live transcode is.
@@ -250,10 +252,10 @@ function sendTranscoded(req, res, format, timeOffset) {
 // Request handling
 // ---------------------------------------------------------------------------
 
-function sendMedia(req, res, body, type, etag) {
+function sendMedia(req, res, body, type, etag, cacheControl) {
     var headers = {
         'Content-Type': type,
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': cacheControl || 'public, max-age=3600',
         'ETag': etag,
         'Accept-Ranges': 'bytes'
     };
@@ -290,6 +292,8 @@ function sendMedia(req, res, body, type, etag) {
     res.end(req.method === 'HEAD' ? undefined : body);
 }
 
+var _jfMissing = {};   // v3.13: Jellyfin image ids that answer 404
+
 var server = http.createServer(function(req, res) {
     var parsed = url.parse(req.url, true);
     var pathname = decodeURIComponent(parsed.pathname);
@@ -305,6 +309,50 @@ var server = http.createServer(function(req, res) {
         _aspectMode = mode;
         res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
         res.end('cover aspect = ' + mode);
+        return;
+    }
+
+    // v3.13 R12.2 (D193): the Jellyfin mock's media, which `<img>` and
+    // `<audio>` fetch directly (tests/mock-boot.js answers the JSON API).
+    //   /Items/{id}/Images/Primary  the SAME PNG getCoverArt serves for that
+    //       id (so the two mocks match pixel for pixel), sized by
+    //       maxWidth/maxHeight; with a `tag`, Jellyfin's immutable caching.
+    //       Ids named by GET /__jf-missing-images?ids=a,b answer 404, as an
+    //       item with no image does on Jellyfin (an empty `ids` clears).
+    //   /Audio/{id}/stream          the WAV with byte ranges (static=true).
+    //   /Audio/{id}/stream.mp3      a transcode as the Subsonic one, no
+    //       ranges, startTimeTicks echoed in X-Mock-Transcode.
+    if (pathname === '/__jf-missing-images') {
+        _jfMissing = {};
+        String(parsed.query.ids || '').split(',').forEach(function(id) { if (id) _jfMissing[id] = true; });
+        res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+        res.end('missing images: ' + Object.keys(_jfMissing).length);
+        return;
+    }
+    var jfImage = /^\/Items\/([^/]+)\/Images\/Primary$/.exec(pathname);
+    if (jfImage) {
+        var jfId = jfImage[1];
+        if (_jfMissing[jfId]) {
+            res.writeHead(404, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+            res.end('no image');
+            return;
+        }
+        var jfSize = parseInt(parsed.query.maxWidth || parsed.query.maxHeight, 10) || 300;
+        jfSize = Math.max(16, Math.min(1000, jfSize));
+        var jfCover = coverPng(jfId, jfSize);
+        sendMedia(req, res, jfCover.png, 'image/png', '"art-' + jfId + '-' + jfCover.w + 'x' + jfCover.h + '"',
+            parsed.query.tag ? 'public, max-age=31536000, immutable' : null);
+        return;
+    }
+    var jfStream = /^\/Audio\/([^/]+)\/stream(\.[a-z0-9]+)?$/.exec(pathname);
+    if (jfStream) {
+        if (jfStream[2]) {
+            var ticks = parseInt(parsed.query.startTimeTicks, 10) || 0;
+            sendTranscoded(req, res, jfStream[2].slice(1), Math.floor(ticks / 10000000),
+                jfStream[2].slice(1) + '; startTimeTicks=' + ticks);
+            return;
+        }
+        sendMedia(req, res, _wav, 'audio/wav', '"stream-' + jfStream[1] + '"');
         return;
     }
 

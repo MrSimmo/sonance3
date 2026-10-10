@@ -36,6 +36,9 @@ function _mockQuery(opts) {
     if (opts.artists != null) q.push('mockArtists=' + opts.artists);
     if (opts.songs != null) q.push('mockSongs=' + opts.songs);
     if (opts.libraries != null) q.push('mockLibraries=' + opts.libraries);
+    // v3.13: `backend: 'jellyfin'` boots the Jellyfin mock (tests/mock-boot.js
+    // seeds its session keys; mockNoSession=1 in `extra` clears them).
+    if (opts.backend === 'jellyfin') q.push('mockBackend=jellyfin');
     if (opts.extra) q.push(opts.extra);
     return q.join('&');
 }
@@ -125,6 +128,12 @@ async function bootBundled(page, opts) {
     var q = _mockQuery(opts);
     await page.goto('/index.html' + (q ? '?' + q : ''), opts.waitUntil ? { waitUntil: opts.waitUntil } : undefined);
     if (opts.waitFor !== false) await waitForScreen(page, 'home');
+}
+
+/** v3.13: bootMock (or bootBundled with `bundled: true`) on the Jellyfin mock. */
+async function bootJellyfin(page, opts) {
+    opts = Object.assign({}, opts || {}, { backend: 'jellyfin' });
+    return opts.bundled ? bootBundled(page, opts) : bootMock(page, opts);
 }
 
 /**
@@ -392,6 +401,7 @@ module.exports = {
     NAV: NAV,
     bootMock: bootMock,
     bootBundled: bootBundled,
+    bootJellyfin: bootJellyfin,
     waitForScreen: waitForScreen,
     splashGone: splashGone,
     settle: settle,
