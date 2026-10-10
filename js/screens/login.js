@@ -244,11 +244,9 @@ var LoginScreen = (function() {
             _fields.username.focus();
             return;
         }
-        if (!password) {
-            _showError('Please enter a password');
-            _fields.password.focus();
-            return;
-        }
+        // v3.13 (R2, P3): an empty password is no longer refused here. A
+        // Jellyfin account may have none; AuthManager.login probes the server
+        // and, if it is not Jellyfin, rejects with the same message (below).
 
         // Build full server URL — normalise first so user can omit http://
         var serverUrl = _normaliseServerUrl(server);
@@ -277,6 +275,7 @@ var LoginScreen = (function() {
             _showError(msg);
             _btnEl.textContent = 'Connect';
             _btnEl.disabled = false;
+            if (err && err.needPassword) _fields.password.focus();
         });
     }
 
