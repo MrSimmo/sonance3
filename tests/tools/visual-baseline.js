@@ -11,7 +11,10 @@
 // baseline".
 //
 // Usage (dev server on 8091):
-//   NODE_PATH="$PWD/node_modules" node tests/tools/visual-baseline.js <outDir> [--scale 1] [--only name,name] [--hide selector] [--geometry]
+//   NODE_PATH="$PWD/node_modules" node tests/tools/visual-baseline.js <outDir> [--scale 1] [--only name,name] [--hide selector] [--geometry] [--extra query]
+//
+// --extra <query> adds mock knobs to every state, e.g. `--extra mockBackend=jellyfin`
+// captures the same states on the Jellyfin mock (v3.13).
 //
 // --hide <selector> removes every match right after each screen's render(),
 // before its activate() registers focus zones, so the app under test is the
@@ -45,6 +48,8 @@ if (!outDir || outDir.indexOf('--') === 0) {
 var scale = arg('--scale', null);
 var only = arg('--only', null);
 var hide = arg('--hide', null);
+var extraAll = arg('--extra', null);
+function withExtra(extra) { return [extraAll, extra].filter(Boolean).join('&') || undefined; }
 // --geometry: after each capture, run the R4 checks (e2e/helpers/geometry.js)
 // and write <outDir>/geometry.json; each state's problems are printed.
 var geometry = process.argv.indexOf('--geometry') > -1;
@@ -73,7 +78,7 @@ async function applyHide(page) {
 }
 
 async function bootWithTrack(page, extra) {
-    await H.bootMock(page, Object.assign({}, FIXTURES, { scale: scale, extra: extra }));
+    await H.bootMock(page, Object.assign({}, FIXTURES, { scale: scale, extra: withExtra(extra) }));
     await page.evaluate(function() {
         Player.setQueue(window.__MOCK__.songs.slice(0, 20), 0);
     });
@@ -226,7 +231,7 @@ var STATES = [
         await H.press(p, 'Escape');          // focus on top nav at Home → exit dialog
     }],
     ['login', async function(p) {
-        await H.bootMock(p, Object.assign({}, FIXTURES, { scale: scale, extra: 'mockNoSession=1', waitFor: false }));
+        await H.bootMock(p, Object.assign({}, FIXTURES, { scale: scale, extra: withExtra('mockNoSession=1'), waitFor: false }));
         await p.waitForSelector('.login-screen');
         // v3.10 R11: the splash has gone and the page under it has re-rastered
         // (captured at once, 85 px of rounded-corner anti-aliasing differed).
