@@ -42,6 +42,10 @@ Developer Mode disables itself after a period — you may need to re-enable it f
    - **Port**: Your Navidrome port (e.g. `4534`)
    - **Username**: Your Navidrome username
    - **Password**: Your Navidrome password
+
+   For a **Jellyfin** server, use its address, its port (Jellyfin's default is `8096`), and your
+   Jellyfin username and password; leave the password empty if your account has none (see
+   [Jellyfin](#jellyfin)).
 3. Press **Connect** — the app will verify the connection and log you in
 4. Your credentials are saved — you won't need to log in again unless you log out
 
@@ -75,12 +79,35 @@ environment:
 
 Restart Navidrome after changing the configuration.
 
+## Jellyfin
+
+Sonance 3.13 also works with **Jellyfin 12.x** (tested with 12.2.0). The same login screen is used:
+Sonance tries the server as a Navidrome (Subsonic) server first and, when it is not one, asks
+`/System/Info/Public` whether it is Jellyfin. With the password left empty it asks Jellyfin first.
+
+- **Port:** Jellyfin listens on `8096` (HTTP) by default. Use the address and port you would type
+  into a browser to reach Jellyfin's web page; a server behind a base path works too
+  (e.g. `http://192.168.0.2` with port `8096`, or the full URL including the path).
+- **Account:** any Jellyfin user that can see a **music** library. Sonance lists the user's music
+  libraries in Settings → Libraries, including any hidden from that user's Jellyfin home screen
+  ("Display" → "My Media" in Jellyfin). An account with no password signs in with the password
+  field empty. Logins through Quick Connect, single sign-on or LDAP plugins are not supported.
+- **CORS:** Jellyfin allows requests from any origin by default (Dashboard → Networking → "CORS
+  hosts", empty or `*`). If that list has been restricted, add `*` (the TV app's origin is not an
+  ordinary web address). Sonance sends an `Authorization` header, so the server must answer the
+  browser's `OPTIONS` preflight, which Jellyfin does when CORS allows the origin.
+- **Device:** Sonance signs in as one device per TV ("Sonance", device "Samsung TV"), visible in
+  Jellyfin's Dashboard → Devices. Logging out in Sonance signs that device out on the server.
+- **Transcoding:** Opus files are streamed as MP3 by Jellyfin's transcoder (ffmpeg), as for
+  Navidrome; everything else streams as stored.
+
 ## Network Requirements
 
 - TV and Navidrome server must be on the **same local network**
 - The Navidrome server must be reachable from the TV's IP address
 - No VPN, firewall, or VLAN isolation between the TV and server
-- The Subsonic API endpoint (`/rest/`) must be accessible (Navidrome enables this by default)
+- The Subsonic API endpoint (`/rest/`) must be accessible (Navidrome enables this by default); for
+  Jellyfin, its normal API (the paths its web page uses)
 
 ## Troubleshooting
 

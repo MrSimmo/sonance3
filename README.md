@@ -1,12 +1,12 @@
 # Sonance
 
-**A music player for Samsung Tizen TVs, built to stream from your self-hosted Navidrome or Subsonic-compatible server.**
+**A music player for Samsung Tizen TVs, built to stream from your self-hosted Navidrome (or Subsonic-compatible) or Jellyfin server.**
 
 ![Sonance](screenshots/nowplaying.png)
 
 Sonance turns your Samsung smart TV into a full-featured music player. Browse your library, play albums, search your collection, and enjoy synced lyrics — all from your sofa with just the TV remote.
 
-This is Version 3 of Sonance — a UI rewrite with a completely new hardware-accelerated interface and multiple library support. **Version 3.11** made it readable and responsive from the sofa: a larger, adjustable interface, a clear focus highlight, faster navigation, and a much richer Now Playing screen. See [CHANGELOG-3.9 to 3.11.md](CHANGELOG-3.9%20to%203.11.md) for what changed. **Version 3.12** brings in the community's contributions — Opus playback, more ways to sort, fuller Home rows and popular songs on artist pages: see [CHANGELOG-3.12.md](CHANGELOG-3.12.md) and [Contributors](#contributors).
+This is Version 3 of Sonance — a UI rewrite with a completely new hardware-accelerated interface and multiple library support. **Version 3.11** made it readable and responsive from the sofa: a larger, adjustable interface, a clear focus highlight, faster navigation, and a much richer Now Playing screen. See [CHANGELOG-3.9 to 3.11.md](CHANGELOG-3.9%20to%203.11.md) for what changed. **Version 3.12** brings in the community's contributions — Opus playback, more ways to sort, fuller Home rows and popular songs on artist pages: see [CHANGELOG-3.12.md](CHANGELOG-3.12.md) and [Contributors](#contributors). **Version 3.13** adds Jellyfin servers, accounts without a password included: see [CHANGELOG-3.13.md](CHANGELOG-3.13.md) and [Jellyfin](#jellyfin).
 
 ## Features
 
@@ -74,6 +74,7 @@ This is Version 3 of Sonance — a UI rewrite with a completely new hardware-acc
 
 - **Samsung Smart TV** — 2019 or newer (Tizen 5.0+). Developed and tested on a Samsung Q90R.
 - **Navidrome** (or any Subsonic API-compatible server) — running on your local network. Tested with Navidrome 0.64. Song credits and lyrics use OpenSubsonic extensions, which Navidrome provides.
+- **or Jellyfin 12.2** (12.x) — a music library on your local network. See [Jellyfin](#jellyfin) for what differs.
 - **Developer Mode** enabled on the TV — required for sideloading
 
 ## Installation
@@ -118,10 +119,26 @@ If you are using Nix, you can make use of the provided `shell.nix` with `nix-she
 
 1. Launch Sonance on your TV
 2. Enter your server address (e.g. `192.168.0.1`) and port (e.g. `4533`)
-3. Enter your username and password
+3. Enter your username and password (on Jellyfin, leave the password empty if your account has none)
 4. You're in — start browsing and playing
 
-Sonance communicates with your server via the Subsonic REST API.
+Sonance works out whether the server is Navidrome or Jellyfin. It talks to Navidrome through the Subsonic REST API and to Jellyfin through Jellyfin's own API.
+
+## Jellyfin
+
+Sonance 3.13 works with Jellyfin 12.2 servers. The screens and features are the same as with Navidrome; Jellyfin keeps some different information, so a few things differ:
+
+- **Your favourites** are listed A–Z (Jellyfin does not record when you favourited something).
+- **Popular** on an artist's page is the songs you have played most by that artist (on Navidrome it comes from Last.fm); it hides until you have played some.
+- **Start radio** and **Similar artists** come from Jellyfin's own Instant Mix and similarity.
+- **Biography** is Jellyfin's artist overview, often empty (the section hides).
+- **Song credits** have the writing and production roles and the file details, but no performers' instruments, BPM or original release year.
+- **Playlist cards** show the number of songs but not the total time.
+- **Search** matches names (an artist search finds album artists), so the same words can find different results than on Navidrome, which searches every artist and matches albums by other fields too.
+- **Resume last queue** is saved on the TV, not on the server.
+- **Logout** also signs the TV out on the server.
+
+Everything else (browsing every library tab with its sorts and genre filter, album and artist pages, playback with seeking, Opus through a server transcode, lyrics, favourites, play counts, choosing libraries in Settings) works as on Navidrome. Quick Connect, single sign-on and LDAP logins, a user picker and Jellyfin before 12.x are not supported. Setting the server up: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#jellyfin).
 
 ## Remote Controls
 
@@ -178,8 +195,9 @@ The lyrics panel shows the current line highlighted in bold, with past and upcom
 - **Samsung AVPlay API** — native hardware audio decoding on the TV
 - **HTML5 Audio** fallback — for browser-based development and testing
 - **Subsonic REST API** with OpenSubsonic extensions — compatible with Navidrome, Subsonic, Airsonic, and others
+- **Jellyfin API** (12.x) — through a translation adapter (`js/jellyfin-api.js`), so both servers share every screen
 - **Tizen Web App** — packaged as a `.wgt` widget
-- **Playwright** — an end-to-end test suite (258 tests, keyboard-only) against a mock server
+- **Playwright** — an end-to-end test suite (349 tests, keyboard-only) against a mock server that can answer as Navidrome or as Jellyfin
 
 The app package is ~100 KB and loads instantly. Zero external dependencies at runtime.
 
@@ -206,7 +224,7 @@ npx playwright test                    # the whole suite at the default 150 % si
 SONANCE_SCALE=1 npx playwright test    # the same at 100 % (also 2 for 200 %)
 ```
 
-The suite runs against the mock server (`tests/mock-boot.js`), so it needs no Navidrome. The GitHub workflow in `.github/workflows/playwright.yml` runs it on every push and pull request to `main`.
+The suite runs against the mock server (`tests/mock-boot.js`, which also answers as Jellyfin with `?mockBackend=jellyfin`), so it needs no Navidrome or Jellyfin. The GitHub workflow in `.github/workflows/playwright.yml` runs it on every push and pull request to `main`.
 
 **Known CI failure:** one test, `R10 not visible on Now Playing` in `e2e/backdrop.spec.ts`, fails on GitHub's Linux runners and passes on the macOS machine the suite is developed on. It compares Now Playing with the Solid and Gradient backgrounds pixel by pixel, and headless Chromium on Linux draws that screen differently. Sonance runs on Samsung TVs (Tizen, Chromium 63), not desktop Linux browsers, so a red run caused by this test alone does not mean the app is broken. The cause is still being investigated; the test is kept at full strictness rather than disabled.
 
@@ -216,9 +234,11 @@ The suite runs against the mock server (`tests/mock-boot.js`), so it needs no Na
 sonance3/
 ├── README.md                  # This file
 ├── CHANGELOG-3.9 to 3.11.md   # What changed since 3.9
+├── CHANGELOG-3.12.md          # What changed in 3.12
+├── CHANGELOG-3.13.md          # What changed in 3.13 (Jellyfin)
 ├── LICENSE                    # GNU GPL v3
 ├── index.html                 # App entry point (launch splash inline)
-├── config.xml                 # Tizen widget configuration (version 3.11.0)
+├── config.xml                 # Tizen widget configuration (version 3.13.0)
 ├── icon.png                   # Square launcher icon (256 × 256)
 ├── icon-oblong-1920.png       # Wide home-row icon (1920 × 1080)
 ├── build.sh                   # Build script → Sonance3.wgt and Sonance3-Oblong.wgt
@@ -232,7 +252,8 @@ sonance3/
 ├── js/
 │   ├── app.js                 # App shell, routing, transitions, settings
 │   ├── api.js                 # Subsonic API client
-│   ├── auth.js                # Authentication manager
+│   ├── jellyfin-api.js        # Jellyfin adapter (answers as the Subsonic client does)
+│   ├── auth.js                # Authentication manager (detects Navidrome or Jellyfin)
 │   ├── player.js              # Dual-backend audio engine (AVPlay + HTML5), queue, resume
 │   ├── focus.js               # D-pad focus management (incl. hold-OK)
 │   ├── components.js          # Shared UI components (credits, scroll views)

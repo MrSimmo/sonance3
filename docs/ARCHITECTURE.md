@@ -99,8 +99,43 @@ Single class handling all Navidrome communication.
 - On error, surface `subsonic-response.error.message` to UI
 - Network errors caught and shown as connection failure toast
 
+### 3.2a JellyfinAPI (jellyfin-api.js) — v3.13
+A second backend behind the same surface, by **translation**, not a second client. `JellyfinAPI`
+inherits `SubsonicAPI.prototype` and replaces the transport: `_request(endpoint, params, opts)`
+hands each Subsonic endpoint name the app uses (`getAlbumList2.view`, `search3.view`, …) to a
+translator that calls Jellyfin 12.x and resolves to the same `subsonic-response` body the public
+methods already parse. So both caches (memory LRU and the localStorage tier), in-flight joining,
+`abortAll`, the library fan-out and merges, the album-list cursor (D23–D25), the song pager and the
+memoised fields run unchanged for both servers, and the screens see the same objects
+(ticket-3.xx-jellyfin P1, R4–R10; decisions D184–D201 in its §9).
+
+- **Auth:** API calls carry `Authorization: MediaBrowser Client="Sonance", Device=…, DeviceId=…,
+  Version="3.13.0", Token=…` (values URL-encoded). Stream URLs carry `ApiKey=`; image URLs carry
+  nothing (anonymous on Jellyfin). The legacy query key and `X-Emby-*` headers are never sent
+  (12.x answers them 401).
+- **Overridden whole:** the constructor, `ping` (`/System/Info`; one silent re-sign-in on 401),
+  `getStreamUrl` (`/Audio/{id}/stream?static=true`, or `stream.mp3` with `startTimeTicks` for a
+  transcode), `getCoverArtUrl` (`/Items/{id}/Images/Primary`, the image tag carried inside
+  `coverArt`), `savePlayQueue`/`getPlayQueue` (the queue is kept on the TV), `countAlbums` and the
+  song pager's count (one `TotalRecordCount` request, D197), `clearMemoryCache`; `_buildUrl` throws.
+- **Translator-private sub-requests** (the played-tracks aggregate behind Recently/Most played,
+  the artist name lookup, the item fetch shared by an artist page) go through `_cachedRequest`
+  under `jf:` endpoint names, so logout and library changes clear them with everything else.
+- **The one seam in api.js:** `SubsonicAPI._trackRequest(rec)` puts an adapter fetch in the
+  open-request registry, so `SubsonicAPI.abortAll()` cancels it (D196).
+- **Selection:** `AuthManager` builds a `JellyfinAPI` when `sonance_backend` is `jellyfin`,
+  otherwise a `SubsonicAPI` exactly as before. Login detects the server: the Subsonic login first;
+  on a not-Subsonic failure (404, invalid response) a `GET /System/Info/Public` probe; with an empty
+  password the probe first (§3.3).
+- **Tests:** the mock answers as Jellyfin (`?mockBackend=jellyfin`) from the same fixtures;
+  `e2e/jellyfin-parity.spec.ts` compares the two backends screen by screen and
+  `e2e/navidrome-identity.spec.ts` holds every Navidrome request to 3.12's.
+
 ### 3.3 Auth Manager (auth.js)
-Manages login/logout and session persistence.
+Manages login/logout and session persistence. Since v3.13 it also selects the backend and keeps
+the Jellyfin session (`sonance_backend`, `sonance_jf_token`, `sonance_jf_user_id`,
+`sonance_jf_server_version`, cleared at logout; `sonance_jf_device_id`, kept), and a Jellyfin
+logout revokes the token on the server.
 
 **localStorage Keys:**
 ```

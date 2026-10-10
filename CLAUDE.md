@@ -1,11 +1,11 @@
 # CLAUDE.md — Sonance (Navidrome TV Client for Samsung Tizen)
 
 ## Project Overview
-Sonance is a music player app for Samsung Tizen TVs (specifically Q90R / Tizen 5.0) that connects to a Navidrome server via the Subsonic REST API. It is a vanilla web app (HTML/CSS/JS) packaged as a `.wgt` widget for sideloading via Jellyfin2Samsung.
+Sonance is a music player app for Samsung Tizen TVs (specifically Q90R / Tizen 5.0) that connects to a Navidrome server via the Subsonic REST API, or (since v3.13, D184) to a Jellyfin 12.x server through a translation adapter (see "Jellyfin" below). It is a vanilla web app (HTML/CSS/JS) packaged as a `.wgt` widget for sideloading via Jellyfin2Samsung.
 
 **Brand:** Sonance — "By Simmo"
 **Target:** Samsung Q90R (2019), Tizen 5.0, 1920×1080 display
-**Server:** Navidrome via Subsonic REST API (v1.16.1)
+**Server:** Navidrome via Subsonic REST API (v1.16.1), or Jellyfin 12.x (12.2 tested) via `js/jellyfin-api.js` (v3.13, D184)
 
 ## v3 UI Design System (current)
 
@@ -86,14 +86,15 @@ Sonance is a music player app for Samsung Tizen TVs (specifically Q90R / Tizen 5
 - **Transcoded formats (v3.12, D173).** Opus (`suffix` opus or a `contentType` naming opus) streams through the server as `format=mp3&maxBitRate=320`; every other URL is unchanged. All stream URLs come from `Player._streamUrlFor`. A transcode has no byte ranges: a seek reloads it with `timeOffset` (whole seconds), the engine's position is offset by it, and its duration is the track's metadata (D174–D176). Never `avplay.seekTo` a transcode.
 
 ### Network & Security
-- **The app MUST only connect to the user-configured Navidrome server.** No CDNs, no external fonts, no analytics, no third-party APIs, no external image sources.
+- **The app MUST only connect to the user-configured server** (Navidrome or, since v3.13, Jellyfin; D200). No CDNs, no external fonts, no analytics, no third-party APIs, no external image sources.
 - All assets (CSS, JS, SVGs, icons) are bundled in the `.wgt`. Zero external dependencies at runtime.
-- `config.xml` uses `<access origin="*" subdomains="true"/>` because the Navidrome server IP/port is user-configured at runtime. This is necessary but the app code itself must NEVER make requests to any URL other than the stored `sonance_server_url`.
-- Stream and cover art URLs are constructed from the Subsonic API using the configured server URL — they are NOT external resources.
+- `config.xml` uses `<access origin="*" subdomains="true"/>` because the server IP/port (Navidrome or Jellyfin) is user-configured at runtime. This is necessary but the app code itself must NEVER make requests to any URL other than the stored `sonance_server_url`.
+- Stream and cover art URLs are constructed from the Subsonic API (or Jellyfin's, D200) using the configured server URL — they are NOT external resources.
 
 ### Test Configuration
 - **Test Navidrome server:** `http://192.168.0.2:4534`
 - Use this for all browser testing during development. The user will provide credentials at runtime.
+- **Jellyfin test server:** see `TEST-ACCOUNT.local.md` (rows "Jellyfin server" / "Jellyfin username"; a passwordless profile). Its address and profile name are written nowhere else: parse them inside Node scripts, never print them (v3.13, D186).
 - The app itself does NOT hardcode any server address — it is always user-configured via the login screen.
 
 ### UI Design
@@ -119,12 +120,21 @@ Sonance is a music player app for Samsung Tizen TVs (specifically Q90R / Tizen 5
 - Cover art: `/rest/getCoverArt.view?id={coverId}&size={size}&...auth_params`
 - Error handling: check `subsonic-response.status === 'ok'`, surface errors to user.
 
+### Jellyfin (v3.13)
+- **Translation adapter (P1, D196).** `JellyfinAPI` (`js/jellyfin-api.js`) inherits `SubsonicAPI.prototype` and replaces the transport: each Subsonic endpoint the app calls is translated to Jellyfin requests and answered in the `subsonic-response` shape, so every public method, both caches, `abortAll`, the album cursor and the song pager are shared. `js/api.js` gets additive seams only (today: `SubsonicAPI._trackRequest`). A new endpoint the app calls needs a translator, or the adapter rejects it ("Not available on Jellyfin: …").
+- **Auth (P4).** API calls: `Authorization: MediaBrowser Client="Sonance", Device=…, DeviceId=…, Version=…, Token=…`, values URL-encoded. Media: `ApiKey=` on **stream URLs only**; image URLs carry no token (anonymous on Jellyfin). Never the legacy lower-case query key, `X-Emby-*` or `X-MediaBrowser-Token` (12.x answers 401), and never both the header and `ApiKey` on one request. Never log a token, the header or a URL with `ApiKey`.
+- **Libraries.** `GET /UserViews?includeHidden=true`, `CollectionType == "music"`: a library hidden from the user's Jellyfin home screen is still theirs. `/Library/MediaFolders` is admin-only. An unscoped `/Genres` is not the per-library sum: ask each music library (D188).
+- **Data.** Durations are ticks (10^7 per second); song requests carry `Fields=MediaStreams` (the codec, D187); Jellyfin JSON omits null fields; album play data is not aggregated (Recently/Most played come from tracks, P7); counts come from `TotalRecordCount` (D197).
+- **Media URLs.** Stream `/Audio/{id}/stream?static=true&ApiKey=…`; a transcode `/Audio/{id}/stream.mp3?audioCodec=mp3&audioBitRate=320000[&startTimeTicks=…]` (D173's rules: seek by reload, never `avplay.seekTo`); cover `/Items/{id}/Images/Primary?maxWidth&maxHeight&quality=90&format=Jpg[&tag]`, the tag carried inside `coverArt`. An artist without `coverArt` has no image: no request (D201).
+
 ### Authentication & Session
 - Login screen collects: server URL (with protocol), port, username, password.
 - Session persists in `localStorage` — user stays logged in indefinitely.
 - Logout button in Settings clears `localStorage` and returns to login screen.
 - On app start, check `localStorage` for existing session; if valid, skip login.
 - Validate connection with `ping.view` before storing credentials.
+- **Server detection (v3.13, P3, D200).** With a password, the Subsonic login runs first, unchanged; only a not-Subsonic failure (HTTP 404, invalid response, JSON parse error) probes `GET /System/Info/Public`, and a `ProductName` starting "Jellyfin" signs in with `POST /Users/AuthenticateByName`. Wrong password, timeout and unreachable keep their messages with no probe. An **empty password** probes first (Jellyfin accounts may have none); anything else shows "Please enter a password" with no Subsonic request.
+- **Jellyfin session keys (P5, D200):** `sonance_backend` (`jellyfin`; absent = Subsonic), `sonance_jf_token`, `sonance_jf_user_id`, `sonance_jf_server_version`, all cleared at logout; `sonance_jf_device_id` kept (one device per install; a second sign-in from it revokes its previous token). The password stays in `sonance_password` (`''` when passwordless) for a silent re-sign-in: a 401 at boot signs in once again; failing that, Login shows. Logout also revokes the token (`POST /Sessions/Logout`, best effort). Resume last queue is saved on the TV (`sonance_jf_queue__<server>|<user id>`, kept at logout).
 
 ### File Structure
 ```
@@ -137,6 +147,7 @@ sonance/
 ├── js/
 │   ├── app.js              # App init, router, screen manager
 │   ├── api.js              # SubsonicAPI class
+│   ├── jellyfin-api.js     # JellyfinAPI: Jellyfin 12.x behind the SubsonicAPI surface (v3.13, D196); loads after api.js
 │   ├── auth.js             # Auth/session management
 │   ├── focus.js            # FocusManager for d-pad navigation
 │   ├── player.js           # Audio playback engine + queue
