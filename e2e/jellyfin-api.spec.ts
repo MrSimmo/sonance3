@@ -518,7 +518,7 @@ test.describe('R6 media URLs', () => {
     expect(r.seek).toBe(r.origin + '/Audio/song-4/stream.mp3?audioCodec=mp3&audioBitRate=320000&startTimeTicks=900000000&ApiKey=mock-jf-token-seed');
   });
 
-  test('covers: no token, the tag when known, ar- stripped, Jpg, stable; they load', async ({ page }) => {
+  test('covers: no token, the tag when known, none for an artist without one (D201), Jpg, stable; they load', async ({ page }) => {
     await page0(page);
     await api(page);
     const r = await page.evaluate(async () => {
@@ -542,9 +542,10 @@ test.describe('R6 media URLs', () => {
     expect(r.tagged).toBe(r.origin + '/Items/album-3/Images/Primary?maxWidth=300&maxHeight=300&quality=90&format=Jpg&tag=0123abcd');
     expect(r.again).toBe(r.tagged);
     expect(r.bare).toBe(r.origin + '/Items/album-5/Images/Primary?maxWidth=150&maxHeight=150&quality=90&format=Jpg');
-    expect(r.artist).toBe(r.origin + '/Items/artist-2/Images/Primary?maxWidth=200&maxHeight=200&quality=90&format=Jpg');
+    // D201: 'ar-' + id means the artist has no image on Jellyfin: no request.
+    expect(r.artist).toBe('');
     expect(r.nosize).toBe(r.origin + '/Items/pl-1/Images/Primary?quality=90&format=Jpg&tag=ff');
-    for (const u of [r.tagged, r.bare, r.artist, r.nosize]) expect(u).not.toMatch(/ApiKey|Token|api_key/i);
+    for (const u of [r.tagged, r.bare, r.nosize]) expect(u).not.toMatch(/ApiKey|Token|api_key/i);
     expect(r.loaded).toBe('300x300');
   });
 

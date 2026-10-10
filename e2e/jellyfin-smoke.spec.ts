@@ -125,3 +125,37 @@ test('R12.6 watchErrors redacts ApiKey, api_key and Token as it does u, t, s, p'
   expect(errs.badResponses[0]).not.toMatch(/SECRET/);
   expect(errs.badResponses[0]).toMatch(/ApiKey=REDACTED&api_key=REDACTED&Token=REDACTED&u=REDACTED&id=keep$/);
 });
+
+test('D201: an artist Jellyfin has no image for costs no request and looks like a failed image on Navidrome', async ({ browser, baseURL }) => {
+  const card = async (backend: string) => {
+    const p: Page = await browser.newPage({ baseURL, viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+    const asked: string[] = [];
+    p.on('request', (r) => { if (/\/Items\/artist-0\/Images\/|getCoverArt\.view\?.*id=(ar-)?artist-0(&|$)/.test(r.url())) asked.push(r.url()); });
+    if (backend === 'subsonic') {
+      await p.route(/\/rest\/getCoverArt\.view\?.*id=artist-0(&|$)/, (r) => r.fulfill({ status: 404, body: '' }));
+      await H.bootMock(p);
+    } else {
+      await H.bootJellyfin(p, { extra: 'mockJfNoArtistImages=1' });
+    }
+    await H.navTo(p, 'library');
+    await H.press(p, 'ArrowDown');
+    await H.settle(p, 250);
+    await H.press(p, 'ArrowLeft');
+    await H.press(p, 'ArrowDown');
+    await p.waitForFunction(() => LibraryScreen.getActiveTab() === 'artists');
+    await H.settle(p, 1200);
+    const el = p.locator('#page-current .artist-grid-card').first();
+    expect(await el.locator('.art-placeholder').count()).toBe(1);
+    const shot = await el.screenshot({ animations: 'disabled' });
+    await p.close();
+    return { shot, asked };
+  };
+  const sub = await card('subsonic');
+  const jf = await card('jellyfin');
+  expect(sub.asked.length).toBeGreaterThan(0);   // Navidrome is asked (here, and fails)
+  expect(jf.asked).toEqual([]);                  // Jellyfin: nothing to ask for
+  const page = await browser.newPage({ baseURL });
+  await page.goto('/tests/mock-index.html?mockNoSession=1');
+  expect(await H.pngDiff(page, sub.shot, jf.shot)).toEqual({ n: 0, max: 0 });
+  await page.close();
+});

@@ -498,13 +498,18 @@ var JellyfinAPI = (function() {
         return base + '/stream?static=true&' + key;
     };
 
-    // `id` is a coverArt this adapter made (item id, then the image tag), a
-    // bare item id (`track.coverArt || track.albumId`), or js/components.js's
-    // 'ar-' + artist id. format=Jpg (P14): the decoder path 3.12 is proven
-    // on, rather than WebP.
+    // `id` is a coverArt this adapter made (item id, then the image tag) or a
+    // bare item id (`track.coverArt || track.albumId`). format=Jpg (P14): the
+    // decoder path 3.12 is proven on, rather than WebP.
+    // D201 (refines P6): js/components.js's 'ar-' + artist id means "no
+    // coverArt", and every artist this adapter builds has coverArt exactly
+    // when Jellyfin has its Primary image, so that request could only 404
+    // (369 of 973 album artists live, again on every scroll: ImageCache does
+    // not keep failures). An empty URL loads nothing and the card keeps its
+    // placeholder, as for any image that fails.
     JellyfinAPI.prototype.getCoverArtUrl = function(id, size) {
         var s = String(id);
-        if (s.indexOf('ar-') === 0) s = s.slice(3);
+        if (s.indexOf('ar-') === 0) return '';
         var tag = null;
         var at = s.indexOf(COVER_SEP);
         if (at > -1) {

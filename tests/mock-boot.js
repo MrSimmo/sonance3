@@ -447,6 +447,8 @@
     //                          empty = a passwordless account)
     //   mockJfFavFail=1        UserFavoriteItems writes answer 500
     //   mockLyricsUnsynced=1   lyrics without timestamps (mockLyrics=1: synced)
+    //   mockJfNoArtistImages=1 every third artist (artist-0, -3 ...) has no
+    //                          Primary image
     //   mockJfAlbumOpus=1      an album track whose fixture song is Opus is
     //                          Opus too (the Subsonic album tracks are all WAV)
     var JELLYFIN = /[?&]mockBackend=jellyfin(&|$)/.test(window.location.search);
@@ -462,6 +464,7 @@
     var JF_FAV_FAIL = /[?&]mockJfFavFail=1/.test(window.location.search);
     var LYRICS_UNSYNCED = /[?&]mockLyricsUnsynced=1/.test(window.location.search);
     var JF_ALBUM_OPUS = /[?&]mockJfAlbumOpus=1/.test(window.location.search);
+    var JF_NO_ARTIST_IMAGES = /[?&]mockJfNoArtistImages=1/.test(window.location.search);
     var TICKS = 10000000;
 
     // Valid tokens, and the token each DeviceId holds: signing in again from
@@ -572,7 +575,9 @@
 
     function _jfArtist(a, fields, detail) {
         var o = {
-            Name: a.name, Id: a.id, Type: 'MusicArtist', ImageTags: { Primary: _tagFor(a.coverArt) },
+            Name: a.name, Id: a.id, Type: 'MusicArtist',
+            ImageTags: (JF_NO_ARTIST_IMAGES && (parseInt(String(a.id).replace('artist-', ''), 10) || 0) % 3 === 0)
+                ? {} : { Primary: _tagFor(a.coverArt) },
             UserData: { PlaybackPositionTicks: 0, PlayCount: 0, IsFavorite: false, Played: false, Key: 'Artist-' + a.name },
             LocationType: 'FileSystem'
         };
