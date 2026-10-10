@@ -383,7 +383,11 @@ function pngPixels(page, png, points) {
         { pngs: [png.toString('base64')], arg: points });
 }
 
-/** Collect page errors and non-2xx responses (minus the Tizen-only webapis 404). */
+/**
+ * Collect page errors and non-2xx responses (minus the Tizen-only webapis
+ * 404). Credentials in a recorded URL are redacted: Subsonic's u/t/s/p and,
+ * since v3.13 (R12.6), Jellyfin's ApiKey, the legacy api_key and Token.
+ */
 function watchErrors(page) {
     var out = { pageErrors: [], badResponses: [] };
     page.on('pageerror', function(e) { out.pageErrors.push(e.message); });
@@ -391,7 +395,7 @@ function watchErrors(page) {
         var s = r.status();
         if (s >= 200 && s < 300) return;
         if (s === 404 && /\$WEBAPIS\/webapis\/webapis\.js/.test(decodeURIComponent(r.url()))) return;
-        out.badResponses.push(s + ' ' + r.url().replace(/([?&](u|t|s|p)=)[^&]*/g, '$1REDACTED'));
+        out.badResponses.push(s + ' ' + r.url().replace(/([?&](u|t|s|p|ApiKey|api_key|Token)=)[^&]*/g, '$1REDACTED'));
     });
     return out;
 }

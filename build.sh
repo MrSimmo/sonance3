@@ -5,7 +5,7 @@
 #
 # Default mode: minify + bundle JS into js/sonance-core.min.js and
 # js/sonance-screens.min.js, point index.html at the bundles, and zip a .wgt.
-# --dev mode:   restore index.html to load the 21 unbundled <script> tags so
+# --dev mode:   restore index.html to load the 22 unbundled <script> tags so
 #               browser dev/testing keeps source-level breakpoints. No .wgt
 #               is produced in --dev mode.
 set -e
@@ -38,7 +38,8 @@ INDEX="index.html"
 # The v3.10-fix2 diagnostic package (D161: a new app id and the tv-samsung
 # profile) was not needed and is no longer built.
 
-CORE_FILES=(js/utils.js js/api.js js/auth.js js/focus.js js/player.js js/starred.js js/image-cache.js js/components.js js/options-sheet.js js/perf-hud.js)
+# v3.13: js/jellyfin-api.js right after js/api.js (it extends SubsonicAPI.prototype at load).
+CORE_FILES=(js/utils.js js/api.js js/jellyfin-api.js js/auth.js js/focus.js js/player.js js/starred.js js/image-cache.js js/components.js js/options-sheet.js js/perf-hud.js)
 SCREEN_FILES=(js/screens/login.js js/screens/home.js js/screens/library.js js/screens/album.js js/screens/artist.js js/screens/search.js js/screens/nowplaying.js js/screens/queue.js js/screens/playlists.js js/screens/settings.js js/app.js)
 
 CORE_OUT="js/sonance-core.min.js"
@@ -58,6 +59,7 @@ swap_script_block() {
     if [ "$mode" = "dev" ]; then
         block="    <script src=\"js/utils.js?v=${CACHE_BUST}\"></script>
     <script src=\"js/api.js?v=${CACHE_BUST}\"></script>
+    <script src=\"js/jellyfin-api.js?v=${CACHE_BUST}\"></script>
     <script src=\"js/auth.js?v=${CACHE_BUST}\"></script>
     <script src=\"js/focus.js?v=${CACHE_BUST}\"></script>
     <script src=\"js/player.js?v=${CACHE_BUST}\"></script>
@@ -93,7 +95,7 @@ swap_script_block() {
 if [ "${1:-}" = "--dev" ]; then
     echo "Sonance — restoring index.html to unbundled (--dev) mode"
     swap_script_block dev
-    echo "index.html now lists the 21 individual <script> tags (cache-bust ${CACHE_BUST})."
+    echo "index.html now lists the 22 individual <script> tags (cache-bust ${CACHE_BUST})."
     echo "Run dev server: node tests/dev-server.js 8091"
     exit 0
 fi
@@ -255,5 +257,5 @@ echo "  3. Settings → select custom .wgt → $OUTPUT (or $OUTPUT_OBLONG)"
 echo ""
 rm -rf "$CSS_STAGE"
 
-echo "Browser dev:  ./build.sh --dev   (restores 21 individual <script> tags)"
+echo "Browser dev:  ./build.sh --dev   (restores 22 individual <script> tags)"
 echo "============================================"
