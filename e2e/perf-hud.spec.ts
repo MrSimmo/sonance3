@@ -64,7 +64,8 @@ test('on (positive control): the probe does see the overlay', async ({ page }) =
   const p = await page.evaluate(() => (window as any).__hudProbe);
   test.info().annotations.push({ type: 'probe(on)', description: JSON.stringify(p) });
   expect(p.raf).toBeGreaterThan(30);
-  expect(p.listeners).toBe(1);
+  // 3.14 H4 (D213): keydown and, for the key trace, keyup (was 1).
+  expect(p.listeners).toBe(2);
   expect(p.observers).toBe(1);
 });
 

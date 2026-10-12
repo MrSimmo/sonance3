@@ -5267,6 +5267,13 @@ html.backdrop-gradient .np-screen {
     white-space: pre;
 }
 
+/* 3.14 H4 (D213): the key trace, a second panel of the same surface and type
+   directly under the readout (0.8rem down, 7.48rem tall: 3 lines of 1.96rem
+   and 1.6rem of padding; then a 0.8rem gap). */
+.perf-hud-keys {
+    top: 9.08rem;
+}
+
 /* v3.10 R1.8 (D58): Settings → Advanced → "Smooth scrolling
    (experimental)", default Off (SonanceUtils.setSmoothScroll). Every
    scroller animates the focus-follow's scrollTop writes. A ghost does not:

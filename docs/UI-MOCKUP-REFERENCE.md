@@ -870,6 +870,21 @@ A diagnostic readout, not part of the visual design. Off by default
 `FPS n  worst n ms` / `key n ms  long n` / `els n  <screen>`. Text-only,
 refreshed at 2 Hz; nothing animates.
 
+**Key trace (3.14 H4, D213), written before the CSS.** A second panel,
+`#perf-hud-keys` (`.perf-hud.perf-hud-keys`), directly under the readout:
+the same surface, type, radius and padding, `top: 9.08rem` (the readout is
+0.8rem + 7.48rem tall: 3 lines of 1.96rem plus 1.6rem of padding; then a
+0.8rem gap), left 0.8rem. A heading `keys, newest last`, then the last 12
+key events, one a line: `down  13  Enter  rep  +40 ms` — down or up, the
+`keyCode`, the `key` (at most 16 characters; a space reads `Space`), `rep`
+only when the event's `repeat` flag is set, and the milliseconds since the
+previous event from `event.timeStamp` (`-` for the first). Fields are two
+spaces apart. Capture-phase keydown and keyup listeners on the document see
+every key before FocusManager; the panel is refreshed with the readout at
+2 Hz, and like it lives outside `#app` and is absent while the overlay is
+off. Its bottom is at 36.16rem (13 lines of 1.96rem, 1.6rem of padding,
+9.08rem down): 723 px at 200 %, inside the 1080 px screen.
+
 ## Transitions (v4, R2, D52/D53) — as built in S4
 
 Page transitions animate `transform` and `opacity` only, each at most

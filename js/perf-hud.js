@@ -2,7 +2,8 @@
    Sonance — Performance overlay (v3.10 R1.1)
    An on-device readout for the TV, where DevTools are not available:
    FPS and worst frame over the last second, the last key's keydown →
-   painted-frame latency, long tasks, #app element count and the screen.
+   painted-frame latency, long tasks, #app element count and the screen;
+   since 3.14 (H4) also the last 12 key events.
    ============================================ */
 
 var PerfHud = (function() {
@@ -27,9 +28,19 @@ var PerfHud = (function() {
     var _ring = null;
     var _ringPos = 0;
     var _keyLatency = null;
+    // 3.14 H4 (D213): the last KEY_TRACE key events, newest last, so a photo
+    // of the TV shows what a remote sends while OK is held (ticket-3.14 §8
+    // Q1). One formatted line per event; the panel is redrawn at 2 Hz.
+    var KEY_TRACE = 12;
+    var KEY_NAME_MAX = 16;
+    var _keysEl = null;
+    var _keys = null;
+    var _keysDirty = false;
+    var _lastKeyTs = null;
 
     // When off, NOTHING below is attached: no rAF loop, no listener, no
-    // observer (R1.1 acceptance, asserted by e2e/perf-hud.spec.ts).
+    // observer (R1.1 acceptance, asserted by e2e/perf-hud.spec.ts and, for
+    // keyup, e2e/perf-hud-keys.spec.ts).
 
     function _onFrame(ts) {
         _ring[_ringPos] = ts;
@@ -37,15 +48,33 @@ var PerfHud = (function() {
         _rafId = requestAnimationFrame(_onFrame);
     }
 
+    // `down  13  Enter  rep  +40 ms`: the gap is from event.timeStamp, the
+    // time the platform stamped the event, not when it was handled.
+    function _trace(e) {
+        var key = e.key === ' ' ? 'Space' : (e.key || '?');
+        if (key.length > KEY_NAME_MAX) key = key.slice(0, KEY_NAME_MAX);
+        var gap = _lastKeyTs === null ? '-' : '+' + Math.round(e.timeStamp - _lastKeyTs) + ' ms';
+        _lastKeyTs = e.timeStamp;
+        _keys.push((e.type === 'keyup' ? 'up' : 'down') + '  ' + e.keyCode + '  ' + key +
+            (e.repeat ? '  rep' : '') + '  ' + gap);
+        if (_keys.length > KEY_TRACE) _keys.shift();
+        _keysDirty = true;
+    }
+
     // Capture phase so the clock starts before FocusManager's own (bubble)
     // handler does the work. Two rAFs = the frame that shows the result.
-    function _onKey() {
+    function _onKey(e) {
         var t0 = performance.now();
+        _trace(e);
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
                 if (_enabled) _keyLatency = performance.now() - t0;
             });
         });
+    }
+
+    function _onKeyUp(e) {
+        _trace(e);
     }
 
     function _startLongTasks() {
@@ -95,6 +124,11 @@ var PerfHud = (function() {
             '  long ' + (_longSupported ? _longCount : 'n/a') + '\n' +
             'els ' + count + '  ' + screen;
 
+        if (_keysDirty) {
+            _keysDirty = false;
+            _keysEl.textContent = 'keys, newest last\n' + _keys.join('\n');
+        }
+
         _timer = setTimeout(_update, UPDATE_MS);
     }
 
@@ -113,8 +147,17 @@ var PerfHud = (function() {
         _el.className = 'perf-hud';
         _el.textContent = 'FPS -';
         document.body.appendChild(_el);
+        _keys = [];
+        _keysDirty = false;
+        _lastKeyTs = null;
+        _keysEl = document.createElement('div');
+        _keysEl.id = 'perf-hud-keys';
+        _keysEl.className = 'perf-hud perf-hud-keys';
+        _keysEl.textContent = 'keys, newest last';
+        document.body.appendChild(_keysEl);
 
         document.addEventListener('keydown', _onKey, true);
+        document.addEventListener('keyup', _onKeyUp, true);
         _startLongTasks();
         _rafId = requestAnimationFrame(_onFrame);
         _timer = setTimeout(_update, UPDATE_MS);
@@ -128,10 +171,14 @@ var PerfHud = (function() {
         if (_timer !== null) clearTimeout(_timer);
         _timer = null;
         document.removeEventListener('keydown', _onKey, true);
+        document.removeEventListener('keyup', _onKeyUp, true);
         if (_observer) _observer.disconnect();
         _observer = null;
         if (_el && _el.parentNode) _el.parentNode.removeChild(_el);
         _el = null;
+        if (_keysEl && _keysEl.parentNode) _keysEl.parentNode.removeChild(_keysEl);
+        _keysEl = null;
+        _keys = null;
         _ring = null;
     }
 
