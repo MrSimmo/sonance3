@@ -258,6 +258,14 @@ var NowPlayingScreen = (function() {
     //  LyricsScroller
     // =========================================
 
+    // 3.14 L3 (D208): the active line's scale (.lyrics-line.lyrics-active in
+    // css/styles.css), where its centre sits, and where the wrapper's mask
+    // stops fading the top (.np-lyrics-scroll-wrapper: 18 %), as fractions of
+    // the wrapper's height.
+    var LYRIC_ACTIVE_SCALE = 1.15;
+    var LYRIC_CENTRE = 0.33;
+    var LYRIC_BAND_TOP = 0.18;
+
     var LyricsScroller = {
         _wrapper: null,
         _container: null,
@@ -266,6 +274,7 @@ var NowPlayingScreen = (function() {
         _activeIndex: -1,
         _synced: false,
         _currentOffset: 0,
+        _linePad: 0,
         // V3-6-fix4 PERF-2: cache layout dimensions populated once on init
         // (and on window resize). _scrollToActive used to read offsetTop /
         // offsetHeight / clientHeight every progress tick (~250 ms while
@@ -304,6 +313,12 @@ var NowPlayingScreen = (function() {
             this._currentOffset = 0;
             this._render();
             this._refreshLayoutCache();
+            // 3.14 L3 (D208): synced lines open with the first one where it
+            // will sit once active, so its start does not slide them down.
+            if (this._synced && this._lineElements.length) {
+                this._currentOffset = this._placement(0, this._lineHeights[0]);
+                this._container.style.transform = 'translateY(' + (-this._currentOffset) + 'px)';
+            }
             if (!this._resizeBound) {
                 var self = this;
                 this._resizeBound = function() { self._refreshLayoutCache(); };
@@ -322,6 +337,8 @@ var NowPlayingScreen = (function() {
             this._wrapperHeight = this._wrapper.clientHeight || 0;
             this._contentHeight = this._container.scrollHeight || 0;
             var n = this._lineElements.length;
+            // Every line has the same vertical padding (rem, so read here).
+            this._linePad = n ? (parseFloat(getComputedStyle(this._lineElements[0]).paddingTop) || 0) : 0;
             this._lineOffsets = new Array(n);
             this._lineHeights = new Array(n);
             for (var i = 0; i < n; i++) {
@@ -427,18 +444,36 @@ var NowPlayingScreen = (function() {
             if (!this._lineOffsets.length && this._lineElements.length) {
                 this._refreshLayoutCache();
             }
-            var lineTop = this._lineOffsets[this._activeIndex] || 0;
-            var lineH = this._lineHeights[this._activeIndex] || 0;
-            var wrapperH = this._wrapperHeight || this._wrapper.clientHeight;
-            var targetScroll = lineTop - (wrapperH * 0.33) + (lineH / 2);
-            if (targetScroll < 0) targetScroll = 0;
-            this._currentOffset = targetScroll;
+            var self = this;
+            var idx = this._activeIndex;
             var container = this._container;
             if (this._scrollRaf !== null) cancelAnimationFrame(this._scrollRaf);
             this._scrollRaf = requestAnimationFrame(function() {
+                // 3.14 L3: the line's real height, now that it is active
+                // (weight 700 can take another row). Every line above it is
+                // past, at the weight it was measured at, so its cached top
+                // still holds.
+                var el = self._lineElements[idx];
+                if (!el) return;                    // reset since
+                var targetScroll = self._placement(idx, el.offsetHeight);
+                self._currentOffset = targetScroll;
                 container.style.transition = 'transform 0.3s ease';
                 container.style.transform = 'translateY(' + (-targetScroll) + 'px)';
             });
+        },
+
+        // 3.14 L3 (D208): the offset that puts line `idx` (`lineH` tall) with
+        // its centre at 33 % of the wrapper, unless its scaled text box would
+        // then start in the top fade: then, as for a line too tall for the
+        // unfaded band, its text starts at the band's top. Not clamped at 0:
+        // the first lines sit there too (3.13 left them in the fade).
+        _placement: function(idx, lineH) {
+            var wrapperH = this._wrapperHeight || this._wrapper.clientHeight;
+            var textH = lineH - 2 * this._linePad;
+            var centre = wrapperH * LYRIC_CENTRE;
+            var lowest = wrapperH * LYRIC_BAND_TOP + textH * LYRIC_ACTIVE_SCALE / 2;
+            if (centre < lowest) centre = lowest;
+            return (this._lineOffsets[idx] || 0) + lineH / 2 - centre;
         },
 
         // D48 / v3.9-fix1 R3: unsynchronised lyrics carry no per-line

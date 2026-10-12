@@ -4232,12 +4232,21 @@ html.backdrop-gradient .np-screen {
     transform: translate(0, -3rem);
 }
 
+/* 3.14 L2 (D205): an over-constrained absolute box (CSS 2.1, Chromium 63).
+   While 55 % is narrower than the space right of 52.6rem (up to about 164 %)
+   the auto margin takes the rest and the box is 3.13's: right-aligned, 55 %
+   wide. Above that it starts at 52.6rem, so its text (padding-left 4.8rem)
+   starts 2rem clear of the column's controls row, whose right edge is 55.4rem
+   (measured at every size). The credits panel takes the same box. */
 .np-lyrics-panel {
     position: absolute;
     top: 0;
     right: 0;
     bottom: 0;
-    width: 55%;
+    left: 52.6rem;
+    width: auto;
+    max-width: 55%;
+    margin-left: auto;
     padding: 0 4rem 0 4.8rem;
     box-sizing: border-box;
     opacity: 0;
@@ -4282,8 +4291,14 @@ html.backdrop-gradient .np-screen {
    instead of font-size change (font-size triggers layout every frame).
    V3-6-fix5 FIX-3: font 18 → 36 px (visibly doubled). Long lines wrap
    naturally inside the panel — do NOT add white-space: nowrap or
-   text-overflow: ellipsis here. */
+   text-overflow: ellipsis here.
+   3.14 L1 (D206): a line is laid out at 1/1.15 of the wrapper, so the
+   active line's scale(1.15) from its left edge still ends inside the
+   wrapper (which clips, twice: overflow and mask). Lines break between
+   words; only a word wider than a row breaks inside it, with no hyphen. */
 .lyrics-line {
+    max-width: calc(100% / 1.15);
+    overflow-wrap: break-word;
     padding: 1.4rem 0;
     line-height: 1.4;
     font-size: 3.6rem;
@@ -4318,8 +4333,10 @@ html.backdrop-gradient .np-screen {
 
 /* D48: a lyric with no timestamps has no active line, so every line is read
    at once — same weight as .lyrics-active minus the scale, rather than the
-   dimmed `upcoming` treatment that only makes sense next to a highlight. */
+   dimmed `upcoming` treatment that only makes sense next to a highlight.
+   3.14 (D206): never scaled, so it keeps the wrapper's full width. */
 .lyrics-line.lyrics-unsynced {
+    max-width: none;
     color: #ffffff;
     opacity: 1;
     transform: scale(1);
@@ -4443,7 +4460,11 @@ html.backdrop-gradient .np-screen {
     top: 0;
     right: 0;
     bottom: 0;
-    width: 55%;
+    /* 3.14 L2 (D205): the lyrics panel's box. */
+    left: 52.6rem;
+    width: auto;
+    max-width: 55%;
+    margin-left: auto;
     /* Top-aligned below the top nav's 8rem (mockup 10), unlike the centred
        lyrics: a long credit list would otherwise centre its title under the
        nav. The body takes what is left and scrolls. */

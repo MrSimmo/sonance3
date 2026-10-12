@@ -179,7 +179,7 @@ not a design length), and measured geometry.
 | Row number / duration | 1.4rem muted, tabular-nums | 14 px | 21 px | :2535, :2572 |
 | Home hero title / subtitle | 3.4rem / 700, 1.8rem | 34 px, 18 px | 51 px, 27 px | :1718, :1728 |
 | NP title / artist line | 2.8rem / 700, 1.7rem | 28 px, 17 px | 42 px, 25.5 px | :770, :782 |
-| Lyrics line | 3.6rem / 400 (active 700, scale 1.15) | 36 px | 54 px | :3416 |
+| Lyrics line (wraps at words, synced lines at `calc(100% / 1.15)`, 3.14 L1) | 3.6rem / 400 (active 700, scale 1.15) | 36 px | 54 px | :3416 |
 | Settings section title | 1.3rem / 600, uppercase, 0.1rem tracking | 13 px | 19.5 px | :1255 |
 | NP bar height | 7.6rem | 76 px | 114 px | :520 |
 
@@ -527,9 +527,35 @@ padding (`padding: inherit`), so a row is where it was. Focus-follow uses
   a fixed zone shape — V3.7-fix29; gap 1.2rem, D158). See "Now Playing
   credits, Up Next and the sleep timer" below.
 - Lyrics: `.np-lyrics-panel` slides in from the right (`translateX(100%)` →
-  0, 0.25 s) while `.np-left` moves to `translateX(calc(320px - 50vw))`.
-  Synced lines highlight and scroll; unsynced lyrics scroll proportionally to
-  elapsed time (D48).
+  0, 0.25 s) while `.np-left` moves to `translate(calc(32rem - 50vw), 0)`
+  (its centre at 32rem). Synced lines highlight and scroll; unsynced lyrics
+  scroll proportionally to elapsed time (D48).
+- **Long lines (3.14 L1–L3, D205, D206, D208, D209), written before the CSS.** A line of
+  any length shows completely at 100–200 %:
+  - **Panel box (L2, D205):** `left: 52.6rem; right: 0; width: auto;
+    max-width: 55%; margin-left: auto` (CSS 2.1's over-constrained absolute
+    box, Chromium 63). Up to about 164 % that is 3.13's box (right-aligned,
+    55 % wide, so 100–150 % are unchanged); above it the panel starts at
+    52.6rem, so its text (padding-left 4.8rem) starts at 57.4rem, 2rem clear
+    of the column's widest part, the controls row, whose right edge was
+    measured at 55.4rem at every size. The credits panel takes the same box
+    (D115/D116).
+  - **Line width (L1, D206):** a synced line is laid out at
+    `max-width: calc(100% / 1.15)`, so the active line's `scale(1.15)` (left
+    centre origin) ends inside the wrapper; `overflow-wrap: break-word`, so
+    lines break between words and only a word wider than a row breaks inside
+    it; `hyphens` stays `manual` (no hyphen is added). An unsynced line never
+    scales and keeps the full width (`max-width: none`).
+  - **Placement (L3, D208):** the active line's centre stays at 33 % of the
+    wrapper's height, except that its scaled text box never starts in the
+    top fade (above 18 %), so a line too tall for the unfaded band
+    (18–82 %) starts at 18 %. The line's height is read when it becomes
+    active (weight 700 can take another row); the cached offsets serve the
+    rest. Synced lyrics open with the first line already where it will be
+    when active, so its start does not slide the lines down.
+  - All rows of a wrapped line take the highlight together (one element,
+    one start time). Font size, weights, the 1.15 scale, colours and the
+    fade are unchanged.
 - **The controls row is entered on Play/Pause (R3, D54, S3).** The
   `np-controls` zone declares `entryIndex: 2`, so Down from the progress bar,
   Down from the top nav, the nav auto-hide drop and a cold open all land on
@@ -577,7 +603,9 @@ slide: Enter on ⓘ adds `credits-active` to `.np-layout`, which moves
 does, while the panel slides in from the right (`translateX(100%)`, opacity
 0 → `translateX(0)`, 1; transform 0.25 s, opacity 0.2 s). Opening credits
 closes lyrics and vice versa; Enter on ⓘ again, or **Back**, closes it.
-- Box: absolute, top 0, right 0, bottom 0, width 55 % (the lyrics panel's),
+- Box: absolute, top 0, right 0, bottom 0, width 55 % (the lyrics panel's;
+  since 3.14, D205, the lyrics panel's `left: 52.6rem … max-width: 55%` box,
+  so above about 164 % it starts at 52.6rem, clear of the column),
   a flex column **top-aligned** below the nav: padding `9rem 4rem 3.2rem
   4.8rem` (mockup 10's title sits below the nav; centred, a long list put
   the title under it, S6 read-back).

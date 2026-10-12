@@ -48,6 +48,30 @@
     // Both default off, so every existing fixture behaves as before.
     var NO_SESSION = /[?&]mockNoSession=1/.test(window.location.search);
     var LYRICS = /[?&]mockLyrics=1/.test(window.location.search);
+    // 3.14 L4: `?mockLyricsLong=1` answers with LONG_LYRICS instead, on both
+    // backends (the parity spec compares like with like): a line that just
+    // fills one row at 100 %, lines of about 70, 100 and 150 characters, one
+    // holding a 30-character word (wider than a row at 200 %), and 33 and 31
+    // characters (the longest lines of the user's example song; lengths only,
+    // read from the live server), between short ones. Every start is inside
+    // the dev server's 20 s WAV. With `mockLyricsUnsynced=1` they come without
+    // timestamps. Exposed as window.__MOCK__.longLyrics.
+    var LYRICS_LONG = /[?&]mockLyricsLong=1/.test(window.location.search);
+    var LONG_LYRICS = [
+        'Quiet now, the room is empty',
+        'Every window on the street is open to the night air',
+        'Hold on',
+        'We walked the long way home along the river while the lamps came on',
+        'Say it again',
+        'And every time the morning found us sleeping there, the radio kept playing the songs we used to know',
+        'Slowly',
+        'If you could see the city from the hill the way I saw it then, with all the lights still burning, you would know why I never left and why I still come back',
+        'And then',
+        'We called it Overextraordinarilyunbreakable and laughed',
+        'Under a sky that never came home.',
+        'Nothing left to say tonight now',
+        'The end'
+    ].map(function(value, i) { return { start: 500 + i * 1500, value: value }; });
 
     // v3.10 S6 opt-ins. `?mockClassicQueue=1` leaves `indexBasedQueue` out of
     // the advertised OpenSubsonic extensions, so the app takes the classic
@@ -446,7 +470,8 @@
     //   mockJfPassword=<pw>    the password sign-in accepts (default mockpass;
     //                          empty = a passwordless account)
     //   mockJfFavFail=1        UserFavoriteItems writes answer 500
-    //   mockLyricsUnsynced=1   lyrics without timestamps (mockLyrics=1: synced)
+    //   mockLyricsUnsynced=1   lyrics without timestamps (mockLyrics=1: synced);
+    //                          with mockLyricsLong=1, on both backends (3.14)
     //   mockJfNoArtistImages=1 every third artist (artist-0, -3 ...) has no
     //                          Primary image
     //   mockJfAlbumOpus=1      an album track whose fixture song is Opus is
@@ -548,7 +573,7 @@
             AlbumArtists: alb ? [{ Name: alb.artist, Id: alb.artistId }] : [],
             ArtistItems: s.artistId ? [{ Name: s.artist, Id: s.artistId }] : [], Artists: [s.artist],
             IndexNumber: s.track, ProductionYear: s.year, RunTimeTicks: s.duration * TICKS,
-            Container: opus ? 'ogg' : 'wav', HasLyrics: LYRICS || LYRICS_UNSYNCED,
+            Container: opus ? 'ogg' : 'wav', HasLyrics: LYRICS || LYRICS_UNSYNCED || LYRICS_LONG,
             ImageTags: {},
             UserData: { PlaybackPositionTicks: 0, PlayCount: 0, IsFavorite: false, Played: false, Key: s.id },
             LocationType: 'FileSystem'
@@ -929,6 +954,13 @@
             }));
         }
         if ((m = /^\/Audio\/([^/]+)\/Lyrics$/.exec(pathname))) {
+            if (LYRICS_LONG) {
+                return answer(jfResp({ Metadata: {}, Lyrics: LONG_LYRICS.map(function(l) {
+                    var o = { Text: l.value, Cues: [] };
+                    if (!LYRICS_UNSYNCED) o.Start = l.start * 10000;
+                    return o;
+                }) }));
+            }
             if (!LYRICS && !LYRICS_UNSYNCED) return answer(jfResp(null, 404));
             var songId = decodeURIComponent(m[1]);
             var lyr = [];
@@ -1154,6 +1186,11 @@
         }
 
         if (/getLyricsBySongId/.test(u)) {
+            if (LYRICS_LONG) {
+                return resp({ lyricsList: { structuredLyrics: [{ lang: 'eng', synced: !LYRICS_UNSYNCED, line: LONG_LYRICS.map(function(l) {
+                    return LYRICS_UNSYNCED ? { value: l.value } : { start: l.start, value: l.value };
+                }) }] } });
+            }
             if (!LYRICS) return resp({ lyricsList: { structuredLyrics: [] } });
             var lines = [];
             for (var ln = 0; ln < 12; ln++) {
@@ -1280,6 +1317,8 @@
             albums: N_ALBUMS, artists: N_ARTISTS,
             songs: N_SONGS, libraries: N_LIBRARIES
         },
+        // 3.14 L4: the long-lines fixture (`?mockLyricsLong=1`).
+        longLyrics: LONG_LYRICS,
         // v3.13: the Jellyfin mock's state (null on the Subsonic mock).
         jf: JELLYFIN ? {
             version: JF_VERSION,
