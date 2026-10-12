@@ -458,6 +458,9 @@ test('[R2] Auto Now Playing rises; Now Playing reached by the nav slides back', 
   await H.press(page, 'ArrowDown', 2, 80);
   await H.settle(page, 100);
   await page.keyboard.press('Enter');
+  // 3.14 H1 (D212): a track row activates RELEASE_GRACE_MS (100 ms) after
+  // its keyup, so the rise starts then, not before press() resolves.
+  await page.waitForFunction(() => App.getCurrentScreen() === 'nowplaying', null, { timeout: 1000 });
   const rise = await layers(page);
   expect(await page.evaluate(() => App.getCurrentScreen())).toBe('nowplaying');
   expect(rise.cur.transform).toBe('translateY(0px)');
