@@ -43,7 +43,7 @@ test.describe('R4 transport', () => {
     await page.evaluate(() => (window as any).__jf.getMusicFolders());
     const call = await lastCall(page, '^/UserViews$');
     expect(call.auth).toBe('MediaBrowser Client="Sonance", Device="Browser", DeviceId="dev-test-0001", ' +
-      'Version="3.13.0", Token="mock-jf-token-seed"');
+      'Version="3.14.0", Token="mock-jf-token-seed"');
     expect(call.query).toEqual({ includeHidden: 'true' });
   });
 

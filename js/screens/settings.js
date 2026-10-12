@@ -321,7 +321,7 @@ var SettingsScreen = (function() {
         aboutBox.appendChild(el('div', { className: 'settings-about-title' }, 'Sonance'));
         aboutBox.appendChild(el('div', { className: 'settings-about-subtitle' }, 'By Simmo'));
 
-        aboutBox.appendChild(el('div', { className: 'settings-about-row' }, 'V3.13'));
+        aboutBox.appendChild(el('div', { className: 'settings-about-row' }, 'V3.14'));
 
         var platformValue = Player.IS_TIZEN ? 'Tizen 5.0' : 'Browser';
         aboutBox.appendChild(el('div', { className: 'settings-about-row' }, 'Platform: ' + platformValue));

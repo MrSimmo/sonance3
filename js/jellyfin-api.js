@@ -31,7 +31,7 @@ var JellyfinAPI = (function() {
     var error = SonanceUtils.error;
 
     var CLIENT = 'Sonance';
-    var VERSION = '3.13.0';
+    var VERSION = '3.14.0';
     var REQUEST_TIMEOUT_MS = 10000;      // api.js's, with the same message
     var LOGOUT_TIMEOUT_MS = 3000;
     var TICKS_PER_SECOND = 10000000;
