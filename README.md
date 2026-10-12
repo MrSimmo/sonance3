@@ -6,7 +6,7 @@
 
 Sonance turns your Samsung smart TV into a full-featured music player. Browse your library, play albums, search your collection, and enjoy synced lyrics — all from your sofa with just the TV remote.
 
-This is Version 3 of Sonance — a UI rewrite with a completely new hardware-accelerated interface and multiple library support. **Version 3.11** made it readable and responsive from the sofa: a larger, adjustable interface, a clear focus highlight, faster navigation, and a much richer Now Playing screen. See [CHANGELOG-3.9 to 3.11.md](CHANGELOG-3.9%20to%203.11.md) for what changed. **Version 3.12** brings in the community's contributions — Opus playback, more ways to sort, fuller Home rows and popular songs on artist pages: see [CHANGELOG-3.12.md](CHANGELOG-3.12.md) and [Contributors](#contributors). **Version 3.13** adds Jellyfin servers, accounts without a password included: see [CHANGELOG-3.13.md](CHANGELOG-3.13.md) and [Jellyfin](#jellyfin).
+This is Version 3 of Sonance — a UI rewrite with a completely new hardware-accelerated interface and multiple library support. **Version 3.11** made it readable and responsive from the sofa: a larger, adjustable interface, a clear focus highlight, faster navigation, and a much richer Now Playing screen. See [CHANGELOG-3.9 to 3.11.md](CHANGELOG-3.9%20to%203.11.md) for what changed. **Version 3.12** brings in the community's contributions — Opus playback, more ways to sort, fuller Home rows and popular songs on artist pages: see [CHANGELOG-3.12.md](CHANGELOG-3.12.md) and [Contributors](#contributors). **Version 3.13** adds Jellyfin servers, accounts without a password included: see [CHANGELOG-3.13.md](CHANGELOG-3.13.md) and [Jellyfin](#jellyfin). **Version 3.14** wraps long lyric lines at whole words at every interface size, and makes holding OK open the options menu on the Samsung silver remote: see [CHANGELOG-3.14.md](CHANGELOG-3.14.md).
 
 ## Features
 
@@ -197,7 +197,7 @@ The lyrics panel shows the current line highlighted in bold, with past and upcom
 - **Subsonic REST API** with OpenSubsonic extensions — compatible with Navidrome, Subsonic, Airsonic, and others
 - **Jellyfin API** (12.x) — through a translation adapter (`js/jellyfin-api.js`), so both servers share every screen
 - **Tizen Web App** — packaged as a `.wgt` widget
-- **Playwright** — an end-to-end test suite (349 tests, keyboard-only) against a mock server that can answer as Navidrome or as Jellyfin
+- **Playwright** — an end-to-end test suite (386 tests, keyboard-only) against a mock server that can answer as Navidrome or as Jellyfin
 
 The app package is ~100 KB and loads instantly. Zero external dependencies at runtime.
 
@@ -236,9 +236,10 @@ sonance3/
 ├── CHANGELOG-3.9 to 3.11.md   # What changed since 3.9
 ├── CHANGELOG-3.12.md          # What changed in 3.12
 ├── CHANGELOG-3.13.md          # What changed in 3.13 (Jellyfin)
+├── CHANGELOG-3.14.md          # What changed in 3.14 (lyrics wrap, hold OK)
 ├── LICENSE                    # GNU GPL v3
 ├── index.html                 # App entry point (launch splash inline)
-├── config.xml                 # Tizen widget configuration (version 3.13.0)
+├── config.xml                 # Tizen widget configuration (version 3.14.0)
 ├── icon.png                   # Square launcher icon (256 × 256)
 ├── icon-oblong-1920.png       # Wide home-row icon (1920 × 1080)
 ├── build.sh                   # Build script → Sonance3.wgt and Sonance3-Oblong.wgt
