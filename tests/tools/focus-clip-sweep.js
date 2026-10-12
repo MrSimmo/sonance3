@@ -245,6 +245,15 @@ async function run(scale) {
     await page.waitForTimeout(500);
     await sweepZones(page, 'nowplaying', results);
     await page.close();
+    // 3.14 (L1-L3): Now Playing with the lyrics panel open, on the long-lines
+    // fixture, a wrapped line active (the panel's box moved at 175 % and 200 %).
+    page = await fresh({ extra: 'mockLyricsLong=1' });
+    await H.navTo(page, 'nowplaying');
+    await page.waitForTimeout(500);
+    await page.evaluate(() => { Player.seekTo(11.2); FocusManager.setActiveZone('np-controls', 6, true); FocusManager.activateFocused(); });
+    await page.waitForTimeout(900);
+    await sweepZones(page, 'nowplaying-lyrics', results);
+    await page.close();
     // Now Playing with the credits panel open (v3.10 S6, R7): its body is
     // a zone (v3.10-fix2 F3: the scroller itself, not one stop per row)
     // only while it is open and taller than its box.
