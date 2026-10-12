@@ -1081,6 +1081,21 @@ or on release after 500 ms without repeats; with no keyup and no repeats by
 1,200 ms it is a normal activation. Every other zone keeps activation on
 keydown. No visual of its own.
 
+**3.14 (ticket-3.14 H1–H3, D207, D211), for the Samsung silver remote,**
+whose hold most likely arrives as release/press pairs:
+- **H1, a keyup is provisional (D207).** An Enter keydown within
+  `RELEASE_GRACE_MS` (100 ms) of a keyup continues the hold, as a repeat.
+  OK is released only when 100 ms pass with no keydown; short or long is
+  judged at the keyup. So a short press activates 100 ms after its keyup.
+- **H2, a hold with no repeats opens at 500 ms** once an Enter keyup has been
+  seen since launch (the platform sends keyups, so a key down at 500 ms is
+  held). With no keyup ever seen, 3.13's rule stays: at 1,200 ms repeats
+  open the sheet and none activate the row.
+- **H3, the held key cannot run a sheet action.** After a hold opens the
+  sheet, Enter is swallowed until the key is released (a keyup and 100 ms
+  with no keydown, or with no keyup a keydown 150 ms after the last); the
+  first fresh press then runs the focused action once.
+
 ## Album art placeholder (no artwork)
 
 - Gradient background from the album/artist colour, with subtle radial

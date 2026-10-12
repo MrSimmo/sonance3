@@ -560,29 +560,47 @@ var FocusManager = (function() {
     }
 
     // =========================================
-    //  Hold-OK (v3.10 A5, ticket A5's table)
+    //  Hold-OK (v3.10 A5, ticket A5's table; 3.14 H1–H3)
     // =========================================
     //
     // On a zone with onLongPress, OK no longer activates on keydown:
     //   keydown                                  -> start a 500 ms timer
-    //   keyup before 500 ms                      -> normal activation
-    //   500 ms and >= 2 auto-repeat keydowns     -> open (onLongPress); the
-    //                                               keyup is swallowed
-    //   500 ms, no repeats, keyup before 1200 ms -> open on release
-    //   no keyup and no repeats by 1200 ms       -> normal activation (a
+    //   keyup                                    -> provisional (H1, D207):
+    //                                               an Enter keydown within
+    //                                               RELEASE_GRACE_MS continues
+    //                                               the hold as a repeat;
+    //                                               otherwise OK was released
+    //                                               at that keyup
+    //   released before 500 ms                   -> normal activation
+    //   500 ms, still held, and an Enter keyup
+    //   seen since launch (H2)                   -> open (onLongPress)
+    //   500 ms and >= 2 repeats                  -> open
+    //   released after 500 ms                    -> open on release
+    //   never a keyup: 1200 ms with no keyup     -> open if it repeated, else
+    //                                               normal activation (a
     //                                               platform with no keyup)
-    // Any Enter keydown while a press is pending counts as a repeat, whether
-    // or not the platform sets `repeat` (D133). Any other key ends a pending
-    // press as if OK had been released then. After a hold opens the sheet,
-    // the held key's repeats are swallowed until its keyup or a fresh press,
-    // so they cannot activate the sheet's first action.
+    // The Samsung silver remote's hold most likely arrives as release/press
+    // pairs (ticket-3.14 §2.4): without the grace its first keyup was a
+    // release and the row played. Any Enter keydown while a press is pending
+    // counts as a repeat, whether or not the platform sets `repeat` (D133).
+    // Any other key ends a pending press as if OK had been released then (at
+    // a provisional keyup, if there is one). After a hold opens the sheet,
+    // Enter is swallowed until the key is released (H3): a keyup with no
+    // keydown within the grace, or, with no keyup, a keydown 150 ms after the
+    // last one. So the held key cannot run the sheet's first action.
     var LONG_PRESS_MS = 500;
     var KEYUP_WAIT_MS = 1200;
     // Enter keydowns closer together than this are one held key's repeats
     // even if the platform does not mark them `repeat` (D133).
     var REPEAT_GAP_MS = 150;
-    var _press = null;           // { zone, idx, repeats, long, timer, cap }
-    var _swallowRepeats = false; // after a hold opened, until keyup / a new press
+    // H1 (D207): a keyup followed this soon by an Enter keydown is not a
+    // release. A short press on a long-press zone activates this long after
+    // its keyup. To be confirmed or retuned from the TV's key trace (H4).
+    var RELEASE_GRACE_MS = 100;
+    var _press = null;           // { zone, idx, repeats, long, upLong, timer, cap, grace }
+    var _swallowRepeats = false; // after a hold opened, until the key is released
+    var _swallowGrace = null;    // the release grace of a keyup while swallowing
+    var _keyupSeen = false;      // H2: an Enter keyup since launch
     var _lastEnterAt = 0;
 
     function _wantsLongPress(zone, idx) {
@@ -595,8 +613,15 @@ var FocusManager = (function() {
         if (!p) return null;
         clearTimeout(p.timer);
         clearTimeout(p.cap);
+        clearTimeout(p.grace);
         _press = null;
         return p;
+    }
+
+    function _endSwallow() {
+        _swallowRepeats = false;
+        if (_swallowGrace !== null) clearTimeout(_swallowGrace);
+        _swallowGrace = null;
     }
 
     // The zone and item a press started on, if they are still what is focused.
@@ -623,21 +648,38 @@ var FocusManager = (function() {
             idx: _focusIndex[_activeZone] || 0,
             repeats: 0,
             long: false,
+            upLong: false,   // `long` at a provisional keyup (H1)
             timer: null,
-            cap: null
+            cap: null,
+            grace: null      // a provisional keyup's grace timer (H1)
         };
         p.timer = setTimeout(function() {
             p.long = true;
-            if (p.repeats >= 2) _openHeld();
+            // H1: a keyup is provisional; its grace decides (a keydown: still
+            // held, open; none: released before 500 ms, activate).
+            if (p.grace !== null) return;
+            // H2: no keyup (or every keyup followed by a keydown), on a
+            // platform that sends keyups: the key is still held.
+            if (_keyupSeen || p.repeats >= 2) _openHeld();
         }, LONG_PRESS_MS);
         p.cap = setTimeout(function() {
-            // No keyup by now: a held key that repeats opens; one that does
-            // not (or a platform with no keyup at all) activates.
-            if (_press !== p) return;
+            // No keyup by now (only reached when none was ever seen, H2): a
+            // held key that repeats opens; one that does not (or a platform
+            // with no keyup at all) activates.
+            if (_press !== p || p.grace !== null) return;
             if (p.repeats >= 1) _openHeld();
             else _pressActivate(_endPress());
         }, KEYUP_WAIT_MS);
         _press = p;
+    }
+
+    // H1: the grace after a keyup passed with no keydown: OK was released at
+    // that keyup, a long press if 500 ms had passed by then.
+    function _pressReleased(p) {
+        if (_press !== p) return;
+        _endPress();
+        if (p.upLong) _pressOpen(p);
+        else _pressActivate(p);
     }
 
     // Open from a held key (repeats): its later repeats and keyup are not
@@ -650,11 +692,13 @@ var FocusManager = (function() {
     }
 
     // A pending press ended by something other than its keyup (another key):
-    // resolved as if OK were released now.
+    // resolved as if OK were released now, or at its provisional keyup.
     function _releasePress() {
-        var p = _endPress();
+        var p = _press;
         if (!p) return;
-        if (p.long) _pressOpen(p);
+        var long = p.grace !== null ? p.upLong : p.long;
+        _endPress();
+        if (long) _pressOpen(p);
         else _pressActivate(p);
     }
 
@@ -664,12 +708,24 @@ var FocusManager = (function() {
         var gap = now - _lastEnterAt;
         _lastEnterAt = now;
         if (_swallowRepeats) {
+            // H3: a keydown inside a keyup's grace: the key was never released.
+            if (_swallowGrace !== null) {
+                clearTimeout(_swallowGrace);
+                _swallowGrace = null;
+                return true;
+            }
             if (e.repeat || gap < REPEAT_GAP_MS) return true;
             _swallowRepeats = false;
         }
         if (_press) {
-            _press.repeats++;
-            if (_press.long && _press.repeats >= 2) _openHeld();
+            var p = _press;
+            if (p.grace !== null) {
+                // H1: the keyup was not a release; the hold goes on.
+                clearTimeout(p.grace);
+                p.grace = null;
+            }
+            p.repeats++;
+            if (p.long && (_keyupSeen || p.repeats >= 2)) _openHeld();
             return true;
         }
         var zone = _zones[_activeZone];
@@ -683,17 +739,26 @@ var FocusManager = (function() {
 
     function _handleKeyUp(e) {
         if (e.keyCode !== 13) return;
+        _keyupSeen = true;
         if (_inputMode) return;
         if (_swallowRepeats) {
-            _swallowRepeats = false;
+            // H3: released only if no Enter keydown follows within the grace.
             e.preventDefault();
+            if (_swallowGrace === null) {
+                _swallowGrace = setTimeout(function() {
+                    _swallowGrace = null;
+                    _swallowRepeats = false;
+                }, RELEASE_GRACE_MS);
+            }
             return;
         }
-        var p = _endPress();
+        var p = _press;
         if (!p) return;
         e.preventDefault();
-        if (p.long) _pressOpen(p);
-        else _pressActivate(p);
+        // H1: provisional. Long or short is judged now, at the keyup.
+        if (p.grace !== null) return;
+        p.upLong = p.long;
+        p.grace = setTimeout(function() { _pressReleased(p); }, RELEASE_GRACE_MS);
     }
 
     /**
@@ -762,7 +827,7 @@ var FocusManager = (function() {
         // v3.10 A5: another key ends a pending OK press first, as a release.
         if (keyCode !== 13) {
             if (_press) _releasePress();
-            _swallowRepeats = false;
+            _endSwallow();
         }
 
         // Back (Samsung 10009) / Escape (browser 27) — always handle, even without active zone

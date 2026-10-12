@@ -121,25 +121,37 @@ test('A5 a hold with auto-repeat opens the sheet at 500 ms; its repeats and keyu
   await page.screenshot({ path: path.join(SHOTS, 's7-options-sheet-150.png') });
 });
 
-test('A5 a hold with no repeats opens on release, after 500 ms', async ({ page }) => {
+// 3.14 H2 (D212): changed. openAlbum's Enter delivered a keyup, so the
+// platform sends keyups and a key still down at 500 ms is held: the sheet
+// opens then (3.13 waited for the release) and the release does nothing.
+test('A5 a hold with no repeats opens at 500 ms once a keyup has been seen (3.14 H2; 3.13 opened on release)', async ({ page }) => {
   await H.bootMock(page);
   await openAlbum(page, 0);
   await sheetClock(page);
   const k = await keys(page);
   await k.down();
   await page.waitForTimeout(800);
-  expect(await openedAfter(page)).toBe(null);              // not before the release
+  const after = await openedAfter(page);
+  expect(after).toBeGreaterThanOrEqual(490);
+  expect(after).toBeLessThan(650);
   await k.up();
-  await H.settle(page, 100);
-  expect(await openedAfter(page)).toBeGreaterThanOrEqual(780);
-  expect(await state(page)).toMatchObject({ open: true, track: null });
+  await H.settle(page, 200);
+  expect(await state(page)).toMatchObject({ open: true, zone: 'options-sheet', index: 0, track: null, queue: [] });
 });
 
+// 3.14 H2 (D212): changed setup. This is the platform with no keyup, so the
+// page must never have seen an Enter keyup: the album is opened by a keydown
+// alone (a Home card activates on keydown), not by openAlbum's Enter press.
 test('A5 no keyup and no repeats by 1,200 ms is a normal activation; the late keyup does nothing', async ({ page }) => {
   await H.bootMock(page);
-  await openAlbum(page, 0);
-  await sheetClock(page);
   const k = await keys(page);
+  await page.evaluate(() => FocusManager.setActiveZone('home-newest', 0, true));
+  await H.settle(page, 100);
+  await k.down();
+  await H.waitForScreen(page, 'album');
+  await page.waitForFunction(() => FocusManager.getActiveZone() === 'album-tracks');
+  await H.settle(page, 300);
+  await sheetClock(page);
   await k.down();
   await page.waitForTimeout(1050);
   expect((await state(page)).track).toBe(null);
@@ -409,6 +421,9 @@ test('A5 on Queue rows: Play now and Remove from queue', async ({ page }) => {
   expect(s.queue).toEqual(['song-0', 'song-1', 'song-3', 'song-4', 'song-5']);
   expect(s).toMatchObject({ open: false, zone: 'queue-list' });
   await k.hold(700, 40);
+  // 3.14 H3 (D212): an Enter within RELEASE_GRACE_MS (100 ms) of the hold's
+  // keyup is the same hold and is swallowed; a person's next press comes later.
+  await page.waitForTimeout(200);
   await choose(page, 'play-now');
   s = await state(page);
   const playing = await page.evaluate(() => Player.getState().queueIndex);
