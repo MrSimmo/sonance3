@@ -126,4 +126,58 @@ D205–D215, each with its reason, and how each requirement's acceptance was rea
 
 ## 6. Verification (T7, 2026-10-12)
 
-Filled in by the final verification below.
+RED runs were on the unchanged code of the working tree, before each change (L, H1–H3, H4); L's
+CSS landed first, so L3's RED is shown on its own. Guards pass on both.
+
+```
+T0 before (3.13), 150 %          349 passed (21.8m)  exit=0
+L RED (T1, unchanged CSS/JS)     12 failed, 8 passed: the active line's scaled box past the wrapper
+                                 (100-150 %), text 21.5 px under the column (175 %), the 30-character
+                                 word cut at the right (200 %, synced and unsynced)
+L after the CSS (L1, L2)         10 failed, 10 passed: only L3, "active 0: top in the band"
+L GREEN (T2)                     20 passed (1.7m)
+H RED (T3, 3.13 focus.js)        6 failed, 6 passed (guards): the sheet never opened with
+                                 release/press pairs or a late keyup; the row played
+H GREEN (T4)                     12 passed (55.1s)
+H4 RED (T5)                      4 failed, 1 passed (guard: off attaches nothing)
+H4 GREEN                         11 passed (with e2e/perf-hud.spec.ts)
+mid-session, 150 %               380 passed, 1 failed (transitions: H1's 100 ms; test fixed, D212)
+final, 150 %                     386 passed (24.8m)  exit=0
+final, 100 %                     386 passed (24.2m)  exit=0
+final, 200 % subset              194 passed (14.0m)  exit=0  (focus-paths, npbar, focus-style,
+                                 options-sheet, transitions, bundled-walk, ui-scale, splash,
+                                 perf-hud, np-controls, np-credits, credits-scroll,
+                                 jellyfin-parity and the 3 new specs)
+focus clip, 100-200 %            175 focus states at each of 5 sizes, 0 clipped (incl. lyrics open:
+                                 10 states a size, credits open: 12)
+L2 geometry (mock, measured)     controls row right edge 55.4rem at every size; lyric and credit
+                                 text gap 175 % -1.23 -> 2.00rem, 200 % -7.40 -> 2.00rem; panels
+                                 at 100/125/150 % 864 px from the left, 1,056 px wide (= 3.13)
+node --check                     7 modified .js files ok
+regression greps                 innerHTML: the nowplaying.js comment only; transition: all: the
+                                 :90 comment only; layout transitions, backdrop-filter, gap:,
+                                 max()/min()/clamp(), setInterval, zoom: none; .np-bg-image: no
+                                 transform, no transition
+build                            exit 0 (gates: no ?. / ?? in the bundles; no backdrop-filter,
+                                 transition: all or bare gap: in the CSS); 7 files a package;
+                                 config.xml, index.html and bundles = the tree; config.xml
+                                 version="3.14.0" in both; V3.14 in the bundle (V3.13: 0);
+                                 icon.png 256 x 256 (square) and 1920 x 1080 (oblong)
+```
+
+Visual, 100 % (`tests/tools/visual-baseline.js <dir> --scale 1 --geometry`, 19 states, 0 page
+errors, 0 bad responses and geometry ok in both runs), T0 (3.13) against 3.14:
+
+- 16 states 0 px.
+- `14-settings-top` and `15-settings-bottom`: 67 px each, box 931,197–938,207, the About line's
+  last digit ("V3.13" → "V3.14").
+- `17-nowplaying-lyrics`: 48,918 px, box 914,177–1260,915, inside the lyrics panel: before the
+  first line starts, the lines open where the first one will sit once active (D208), so they start
+  lower; 3.13 left the first lines at the top, in the fade.
+
+Screenshots (mock only, read back), `screenshots/v3-14/`: `lyrics-175-before.png`,
+`lyrics-200-before.png` (3.13: the controls over the lyrics), `lyrics-175-after.png`,
+`lyrics-200-after.png`, `credits-200-before.png`, `credits-200-after.png`, `credits-200.png`,
+`lyrics-long-100.png`, `lyrics-long-150.png`, `lyrics-long-200.png` (a wrapped active line, white
+on every row; at 200 % the 155-character line starts at the band's top, D209),
+`perf-hud-keys.png` (the trace of a scripted hold).
